@@ -60,7 +60,7 @@ export default function Home() {
     setBusy((n) => n + list.length);
     for (const f of list) {
       try {
-        const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type });
+        const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type, hash: await sha256(f) });
         const j = await r.json();
         if (!r.ok) { say(`${f.name}: ${j.error}`); continue; }
         const put = await fetch(j.url, { method: 'PUT', headers: { 'Content-Type': f.type }, body: f }).catch(() => null);
