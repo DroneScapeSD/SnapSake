@@ -10,6 +10,10 @@ type Info = { recipients: { id: string; email: string }[]; used: number };
 const size = (b: number) => (b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB' : (b / 1024 ** 2).toFixed(1) + ' MB');
 const token = async () => (await supabase.auth.getSession()).data.session?.access_token ?? '';
 const api = async (path: string, body: object) => fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${await token()}` }, body: JSON.stringify(body) });
+async function sha256(f: File) {
+  const buf = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default function Home() {
   const [uid, setUid] = useState<string | null>(null);
