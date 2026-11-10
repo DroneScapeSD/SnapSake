@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-const APP = 'PhotoApp'; // change to your app's name
+const APP = 'PhotoDrop'; // change to your app's name
 const QUOTA = 3 * 1024 ** 3;
 const LIMIT = 3;
 type Photo = { id: string; owner_id: string; filename: string; size_bytes: number };
