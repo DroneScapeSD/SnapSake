@@ -13,15 +13,21 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await admin.auth.getUser(token);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { filename, size, type } = await req.json();
+  const { filename, size, type, hash } = await req.json();
   if (typeof type !== 'string' || !type.startsWith('image/')) return NextResponse.json({ error: 'Images only' }, { status: 400 });
   if (!(size > 0) || size > MAX_FILE) return NextResponse.json({ error: 'Max 15 MB per photo' }, { status: 400 });
+  if (typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) return NextResponse.json({ error: 'Bad request' }, { status: 400 });
 
   const { data: prof } = await admin.from('profiles').select('used_bytes').eq('id', user.id).single();
   if (!prof || prof.used_bytes + size > QUOTA) return NextResponse.json({ error: 'Storage quota reached' }, { status: 400 });
 
   const key = `${user.id}/${crypto.randomUUID()}`;
-  const { data: photo, error } = await admin.from('photos').insert({ owner_id: user.id, object_key: key, filename, size_bytes: size }).select('id').single();
+  const { data: photo, error } = await admin
+    .from('photos')
+    .insert({ owner_id: user.id, object_key: key, filename, size_bytes: size, content_hash: hash })
+    .select('id')
+    .single();
+  if (error?.code === '23505') return NextResponse.json({ error: 'You already uploaded this photo' }, { status: 409 });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await admin.from('profiles').update({ used_bytes: prof.used_bytes + size }).eq('id', user.id);
 
