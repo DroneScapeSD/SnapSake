@@ -11,7 +11,7 @@ const QUOTA = 3 * 1024 ** 3;
 const LIMIT = 3;
 type Photo = { id: string; owner_id: string; filename: string; size_bytes: number };
 type Info = { recipients: { id: string; email: string }[]; used: number };
-const size = (b: number) => (b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB' : (b / 1024 ** 2).toFixed(1) + ' MB');
+const size = (b: number) => (b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB Usage' : (b / 1024 ** 2).toFixed(1) + ' MB');
 const token = async () => (await supabase.auth.getSession()).data.session?.access_token ?? '';
 const api = async (path: string, body: object) => fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${await token()}` }, body: JSON.stringify(body) });
 
