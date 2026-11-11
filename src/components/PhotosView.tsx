@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
-import { LIMIT, api, label, pillPrimary, size } from '@/lib/ui';
+import { compressImage } from '@/lib/compress';
+import type { Friendship } from '@/lib/friends';
+import { LIMIT, api, label, pillGhost, pillPrimary, size } from '@/lib/ui';
 
 type Photo = { id: string; owner_id: string; filename: string; size_bytes: number };
 type Info = { recipients: { id: string; email: string }[]; used: number };
@@ -13,8 +15,10 @@ async function sha256(f: File) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function PhotosView({ uid, active, say, onChanged }: {
+export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends }: {
   uid: string;
+  friends: Friendship[]; // accepted friends, for the share checklist
+  onOpenFriends: () => void;
   active: boolean; // false while another sidebar section is showing (this view stays mounted so uploads keep going)
   say: (m: string) => void;
   onChanged: () => void; // tell the parent storage usage may have changed
@@ -26,7 +30,8 @@ export function PhotosView({ uid, active, say, onChanged }: {
   const [tab, setTab] = useState<'mine' | 'shared'>('mine');
   const [open, setOpen] = useState<Photo | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
-  const [to, setTo] = useState('');
+  const [sharing, setSharing] = useState<string | null>(null); // user id of the checkbox being saved
+  const [pending, setPending] = useState<Record<string, boolean>>({}); // optimistic checkbox state while saving
   const [busy, setBusy] = useState(0);
   const [bad, setBad] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
@@ -52,9 +57,13 @@ export function PhotosView({ uid, active, say, onChanged }: {
   async function upload(files: FileList | File[] | null) {
     const list = Array.from(files ?? []);
     setBusy((n) => n + list.length);
-    for (const f of list) {
+    for (const original of list) {
       try {
-        const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type, hash: await sha256(f) });
+        // Hash the original so re-uploading the same photo is still caught as a duplicate.
+        const hash = await sha256(original);
+        let f: File;
+        try { f = await compressImage(original); } catch { say(`${original.name}: couldn't read this image`); continue; }
+        const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type, hash });
         const j = await r.json();
         if (!r.ok) { say(`${f.name}: ${j.error}`); continue; }
         const put = await fetch(j.url, { method: 'PUT', headers: { 'Content-Type': f.type }, body: f }).catch(() => null);
@@ -65,21 +74,21 @@ export function PhotosView({ uid, active, say, onChanged }: {
   }
 
   async function openPhoto(p: Photo) {
-    setOpen(p); setInfo(null); setTo('');
+    setOpen(p); setInfo(null); setPending({});
     if (p.owner_id === uid) { const { data } = await supabase.rpc('share_info', { p_photo_id: p.id }); setInfo(data); }
   }
   async function refreshInfo() { if (open) { const { data } = await supabase.rpc('share_info', { p_photo_id: open.id }); setInfo(data); } }
 
-  async function share() {
-    if (!open || !to.trim()) return;
-    const { error } = await supabase.rpc('share_photo', { p_photo_id: open.id, p_email: to });
-    if (error) return say(error.message);
-    setTo(''); say('Shared'); refreshInfo();
-  }
-  async function unshare(rid: string) {
-    if (!open) return;
-    await supabase.rpc('unshare_photo', { p_photo_id: open.id, p_recipient: rid });
-    refreshInfo();
+  // Checking a friend shares the photo with them; unchecking removes their access.
+  async function toggleShare(userId: string, email: string, on: boolean) {
+    if (!open || sharing) return;
+    setSharing(userId); setPending({ [userId]: on }); // tick instantly; the server result below corrects it if it fails
+    const { error } = on
+      ? await supabase.rpc('share_photo', { p_photo_id: open.id, p_email: email })
+      : await supabase.rpc('unshare_photo', { p_photo_id: open.id, p_recipient: userId });
+    if (error) say(error.message);
+    await refreshInfo();
+    setPending({}); setSharing(null);
   }
   async function del() {
     if (!open) return;
@@ -166,27 +175,43 @@ export function PhotosView({ uid, active, say, onChanged }: {
               {open.owner_id === uid ? (
                 <>
                   <div>
-                    <p className={`${label} text-fg/50`}>Share with a friend</p>
+                    <p className={`${label} text-fg/50`}>Share with friends</p>
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex gap-1">
                         {Array.from({ length: LIMIT }).map((_, i) => <span key={i} className={`h-1.5 w-6 rounded-full ${info && i < info.used ? 'bg-accent' : 'bg-fg/15'}`} />)}
                       </div>
                       <p className="text-xs text-fg/45">{info ? `${info.used} of ${LIMIT} slots used (lifetime)` : ' '}</p>
                     </div>
-                    <div className="mt-3 flex gap-2">
-                      <input className="min-w-0 flex-1 rounded-xl border border-fg/10 bg-fg/[0.04] px-3 py-2.5 text-sm text-fg outline-none placeholder:text-fg/35 focus:border-fg/30" placeholder="friend@email.com" value={to} onChange={(e) => setTo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && share()} />
-                      <button className="rounded-full bg-fg px-4 text-sm font-medium text-bg transition hover:bg-fg/85" onClick={share}>Share</button>
-                    </div>
+                    {(() => {
+                      // Friends first; anyone it was shared with before who isn't (or is no longer) a friend stays listed so you can still remove them.
+                      const shared = new Set(info?.recipients.map((r) => r.id));
+                      const rows = [
+                        ...friends.map((f) => ({ id: f.user_id, email: f.email })),
+                        ...(info?.recipients.filter((r) => !friends.some((f) => f.user_id === r.id)) ?? []),
+                      ];
+                      if (!info) return <div className="mt-3 space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-11 animate-pulse rounded-xl bg-fg/[0.06]" />)}</div>;
+                      if (rows.length === 0) return (
+                        <div className="mt-3 rounded-xl border border-dashed border-fg/15 p-4 text-center">
+                          <p className="text-sm text-fg/55">You don&apos;t have any friends yet.</p>
+                          <button className={`${pillGhost} mt-3 !px-4 !py-2`} onClick={() => { setOpen(null); onOpenFriends(); }}>Add friends</button>
+                        </div>
+                      );
+                      return (
+                        <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
+                          {rows.map((r) => (
+                            <li key={r.id}>
+                              <label className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-fg/[0.06] ${(pending[r.id] ?? shared.has(r.id)) ? 'bg-fg/[0.05]' : ''} ${sharing ? 'opacity-70' : ''}`}>
+                                <input type="checkbox" className="h-4 w-4 shrink-0 accent-accent" checked={pending[r.id] ?? shared.has(r.id)} disabled={!!sharing}
+                                  onChange={(e) => toggleShare(r.id, r.email, e.target.checked)} />
+                                <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.email[0]}</span>
+                                <span className="min-w-0 flex-1 truncate text-sm">{r.email}</span>
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
                   </div>
-                  <ul className="space-y-2">
-                    {info?.recipients.length === 0 && <li className="text-sm text-fg/45">Not shared with anyone.</li>}
-                    {info?.recipients.map((r) => (
-                      <li key={r.id} className="flex items-center justify-between gap-3 rounded-xl bg-fg/[0.05] px-3 py-2.5 text-sm">
-                        <span className="truncate">{r.email}</span>
-                        <button className="text-red-500 transition hover:text-red-400" onClick={() => unshare(r.id)}>Remove</button>
-                      </li>
-                    ))}
-                  </ul>
                   <button className="w-full rounded-full border border-red-500/30 py-2.5 text-sm text-red-500 transition hover:bg-red-500/10" onClick={del}>Delete photo</button>
                 </>
               ) : <p className="text-sm text-fg/55">This photo was shared with you.</p>}
