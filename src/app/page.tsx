@@ -13,6 +13,7 @@ import { PhotosView } from '@/components/PhotosView';
 import { FriendsView } from '@/components/FriendsView';
 import { SettingsView } from '@/components/SettingsView';
 import { AccountView } from '@/components/AccountView';
+import { Footer } from '@/components/Footer';
 
 const initialView = (): View => {
   if (typeof window === 'undefined') return 'photos';
@@ -62,9 +63,9 @@ function Home() {
   );
 
   if (!user) return (
-    <main className={`${sans.className} relative min-h-screen overflow-hidden bg-bg text-fg`}>
+    <main className={`${sans.className} relative flex min-h-screen flex-col overflow-hidden bg-bg text-fg`}>
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_75%_0%,rgba(245,166,35,0.16),transparent_70%),radial-gradient(50%_40%_at_0%_100%,rgba(99,102,241,0.12),transparent_70%)]" />
-      <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-[1.2fr_1fr]">
+      <div className="relative mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-6 py-12 md:grid-cols-[1.2fr_1fr]">
         <section>
           <p className={`${label} text-fg/50`}>{APP}</p>
           <h1 className="mt-6 text-[clamp(2.75rem,8vw,6rem)] font-semibold leading-[0.95] tracking-tight">
@@ -88,6 +89,7 @@ function Home() {
           </div>
         </section>
       </div>
+      <Footer className="relative" />
       {toastEl}
     </main>
   );
@@ -100,7 +102,7 @@ function Home() {
         used={profile.used} email={user.email ?? ''} onLogout={logout}
       />
 
-      <div className="md:pl-64">
+      <div className="flex min-h-screen flex-col md:pl-64">
         {/* Mobile top bar */}
         <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-fg/10 bg-bg/80 px-4 py-3 backdrop-blur-xl md:hidden">
           <button aria-label="Open menu" className="flex h-9 w-9 items-center justify-center rounded-full text-fg/70 transition hover:bg-fg/10 hover:text-fg" onClick={() => setNavOpen(true)}>
@@ -110,12 +112,13 @@ function Home() {
           {friends.incoming.length > 0 && view !== 'friends' && <span className="ml-auto h-2 w-2 rounded-full bg-accent" aria-label="Pending friend requests" />}
         </header>
 
-        <main className="mx-auto max-w-6xl px-5 py-10">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10">
           <PhotosView uid={user.id} active={view === 'photos'} say={say} onChanged={profile.refresh} friends={friends.friends} onOpenFriends={() => go('friends')} />
           {view === 'friends' && <FriendsView friends={friends} say={say} />}
           {view === 'settings' && <SettingsView />}
           {view === 'account' && <AccountView user={user} tier={profile.tier} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
         </main>
+        <Footer />
       </div>
       {toastEl}
     </div>
