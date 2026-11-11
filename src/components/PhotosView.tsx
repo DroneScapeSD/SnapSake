@@ -18,6 +18,14 @@ async function sha256(f: File) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Falls back to a plain select if the in_library column isn't there yet (supabase/albums.sql not run), so My Uploads keeps working.
+async function fetchPhotos(): Promise<Photo[]> {
+  const full = await supabase.from('photos').select('id,owner_id,filename,size_bytes,in_library').order('created_at', { ascending: false });
+  if (!full.error) return (full.data ?? []) as Photo[];
+  const basic = await supabase.from('photos').select('id,owner_id,filename,size_bytes').order('created_at', { ascending: false });
+  return (basic.data ?? []).map((p) => ({ ...p, in_library: true }));
+}
+
 export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends, tab, onTab, albums, used }: {
   uid: string;
   tab: PhotoTab; // which of My Uploads / Shared With Me / Albums is showing (owned by the page so a share link can open Albums)
@@ -35,7 +43,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [sharedIds, setSharedIds] = useState<Set<string>>(new Set()); // photos shared with me directly (as opposed to through an album)
-  const [albumPrompt, setAlbumPrompt] = useState<string[] | null>(null); // ids just uploaded together, offered an album
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null); // several files chosen at once, waiting on the "make an album?" question
   const [albumName, setAlbumName] = useState('');
   const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState<Photo | null>(null);
@@ -57,12 +65,12 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
 
   const load = useCallback(
     () => Promise.all([
-      supabase.from('photos').select('id,owner_id,filename,size_bytes').order('created_at', { ascending: false }),
+      fetchPhotos(),
       supabase.from('photo_shares').select('photo_id'),
-    ]).then(async ([{ data }, { data: shares }]) => {
-      setPhotos(data ?? []); setSharedIds(new Set((shares ?? []).map((s) => s.photo_id))); setLoaded(true);
+    ]).then(async ([data, { data: shares }]) => {
+      setPhotos(data); setSharedIds(new Set((shares ?? []).map((s) => s.photo_id))); setLoaded(true);
       onChanged();
-      if (data?.length) setUrls(await signedUrls(data.map((p) => p.id)));
+      if (data.length) setUrls(await signedUrls(data.map((p) => p.id)));
     }),
     [onChanged],
   );
@@ -76,12 +84,11 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
   const full = used >= QUOTA;
   const FULL_MSG = `Storage full (${size(QUOTA)}). Delete some photos to upload more.`;
 
-  async function upload(files: FileList | File[] | null) {
-    const list = Array.from(files ?? []);
-    if (!list.length) return;
-    if (full) return say(FULL_MSG);
+  // Uploads the files one by one. With albumId they go straight into that album: stored once, and kept out of My Uploads.
+  // Resolves to how many photos ended up stored (or added to the album).
+  async function uploadFiles(list: File[], albumId?: string): Promise<number> {
     setBusy((n) => n + list.length);
-    const added: string[] = []; // ids of photos from this batch that uploaded successfully
+    let stored = 0;
     for (let i = 0; i < list.length; i++) {
       const original = list[i];
       try {
@@ -89,30 +96,60 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
         const hash = await sha256(original);
         let f: File;
         try { f = await compressImage(original); } catch { say(`${original.name}: couldn't read this image`); continue; }
-        const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type, hash });
+        const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type, hash, albumId });
         const j = await r.json();
         if (!r.ok) {
           if (j.code === 'quota') { say(j.error); setBusy((n) => n - (list.length - 1 - i)); break; } // out of space: stop the rest of the batch
           say(`${f.name}: ${j.error}`); continue;
         }
+        if (j.attached) { stored++; continue; } // you already had this photo: it was just added to the album, nothing to upload
         const put = await fetch(j.url, { method: 'PUT', headers: { 'Content-Type': f.type }, body: f }).catch(() => null);
         if (!put || !put.ok) { await api('/api/delete', { id: j.id }); say(`${f.name}: upload failed (check R2 CORS)`); }
-        else added.push(j.id);
+        else stored++;
       } finally { setBusy((n) => n - 1); }
     }
-    await load();
-    // Several photos went up together: offer to put them in an album.
-    if (added.length >= 2) { setAlbumName(''); setAlbumPrompt(added); }
+    if (albumId) await albums.refresh();
+    return stored;
   }
 
-  async function createFromUpload() {
-    if (!albumPrompt || creating) return;
+  // Files chosen for My Uploads. Two or more at once: ask first whether they should become an album.
+  async function upload(files: FileList | File[] | null) {
+    const list = Array.from(files ?? []);
+    if (!list.length) return;
+    if (full) return say(FULL_MSG);
+    if (list.length >= 2) { setAlbumName(''); setPendingFiles(list); return; }
+    await uploadFiles(list);
+    load();
+  }
+
+  async function uploadToLibrary() {
+    const list = pendingFiles; setPendingFiles(null);
+    if (!list) return;
+    await uploadFiles(list);
+    load();
+  }
+
+  // "Create album": make the album first, then upload every photo straight into it.
+  async function uploadToNewAlbum() {
+    if (!pendingFiles || creating) return;
     setCreating(true);
-    const r = await albums.create(albumName, albumPrompt);
+    const r = await albums.create(albumName, []);
     setCreating(false);
-    if (r.error) return say(r.error);
-    setAlbumPrompt(null); say('Album created');
-    onTab('albums'); if (r.id) albums.setOpenId(r.id);
+    if (r.error || !r.id) return say(r.error ?? 'Could not create the album');
+    const list = pendingFiles; setPendingFiles(null);
+    const n = await uploadFiles(list, r.id);
+    if (n === 0) { await albums.remove(r.id); return; } // nothing went up, so don't leave an empty album behind
+    say(`Album created with ${n} ${n === 1 ? 'photo' : 'photos'}`);
+    onTab('albums'); albums.setOpenId(r.id);
+  }
+
+  // Upload from inside an album (owner only).
+  async function uploadToAlbum(albumId: string, files: FileList | File[] | null) {
+    const list = Array.from(files ?? []);
+    if (!list.length) return;
+    if (full) return say(FULL_MSG);
+    const n = await uploadFiles(list, albumId);
+    if (n) say(`Added ${n} ${n === 1 ? 'photo' : 'photos'} to the album`);
   }
 
   async function openPhoto(p: Photo) {
@@ -150,13 +187,18 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
     setOpen(null); load(); albums.refresh(); // the photo also leaves any album it was in
   }
 
-  const mine = photos.filter((p) => p.owner_id === uid);
+  const mine = photos.filter((p) => p.owner_id === uid && p.in_library); // photos uploaded straight into an album aren't listed here
   const shared = photos.filter((p) => p.owner_id !== uid && sharedIds.has(p.id)); // album-only photos live in the Albums tab
   const shown = tab === 'mine' ? mine : shared;
   const grid = photoGrid(prefs.density === 'compact');
 
   return (
-    <div hidden={!active} className="min-h-full" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (active && tab === 'mine') upload(e.dataTransfer.files); }}>
+    <div hidden={!active} className="min-h-full" onDragOver={(e) => e.preventDefault()} onDrop={(e) => {
+      e.preventDefault();
+      if (!active) return;
+      if (tab === 'mine') upload(e.dataTransfer.files);
+      else if (tab === 'albums' && albums.openId && albums.items.find((a) => a.id === albums.openId)?.is_owner) uploadToAlbum(albums.openId, e.dataTransfer.files);
+    }}>
       <div className="space-y-8">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -199,7 +241,8 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
         </nav>
 
         {tab === 'albums' ? (
-          <AlbumsView uid={uid} albums={albums} photos={photos} urls={urls} say={say} />
+          <AlbumsView uid={uid} albums={albums} photos={photos} urls={urls} say={say}
+            friends={friends} onOpenFriends={onOpenFriends} onUpload={uploadToAlbum} busy={busy} full={full} reload={load} />
         ) : !loaded ? (
           <div className={grid}>{Array.from({ length: 8 }).map((_, i) => <div key={i} className="aspect-[4/5] animate-pulse rounded-3xl bg-fg/[0.06]" />)}</div>
         ) : shown.length === 0 ? (
@@ -226,18 +269,21 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
         )}
       </div>
 
-      {albumPrompt && active && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setAlbumPrompt(null)}>
+      {pendingFiles && active && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setPendingFiles(null)}>
           <div className="w-full max-w-md space-y-5 rounded-3xl border border-fg/10 bg-surface p-6 text-fg" onClick={(e) => e.stopPropagation()}>
-            <div>
-              <h3 className="text-xl font-semibold tracking-tight">Create an album?</h3>
-              <p className="mt-1 text-sm text-fg/55">You just uploaded {albumPrompt.length} photos. Put them in an album you can share with a link.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold tracking-tight">Create an album?</h3>
+                <p className="mt-1 text-sm text-fg/55">You picked {pendingFiles.length} photos. Photos uploaded into an album are kept in that album only and won&apos;t appear in My Uploads.</p>
+              </div>
+              <button aria-label="Cancel upload" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fg/15 text-fg/60 transition hover:bg-fg/10 hover:text-fg" onClick={() => setPendingFiles(null)}>✕</button>
             </div>
             <input className={field} placeholder="Album name" maxLength={60} value={albumName} autoFocus
-              onChange={(e) => setAlbumName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createFromUpload()} />
-            <div className="flex justify-end gap-2">
-              <button className={`${pillGhost} !px-5 !py-2.5`} onClick={() => setAlbumPrompt(null)}>Not now</button>
-              <button className={`${pillPrimary} !px-5 !py-2.5`} onClick={createFromUpload} disabled={creating}>{creating ? 'Creating...' : 'Create album'}</button>
+              onChange={(e) => setAlbumName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && uploadToNewAlbum()} />
+            <div className="flex flex-col gap-2 sm:flex-row-reverse">
+              <button className={`${pillPrimary} !px-5 !py-2.5 sm:flex-1`} onClick={uploadToNewAlbum} disabled={creating}>{creating ? 'Creating...' : 'Create album & upload'}</button>
+              <button className={`${pillGhost} !px-5 !py-2.5 sm:flex-1`} onClick={uploadToLibrary} disabled={creating}>Just upload</button>
             </div>
           </div>
         </div>

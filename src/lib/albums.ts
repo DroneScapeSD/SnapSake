@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/ui';
 
 export type Album = {
   id: string;
@@ -74,7 +75,15 @@ export function useAlbums(uid: string | null) {
     },
     resetLink: async (id: string) => fail('reset_album_link', { p_album: id }),
     rename: (id: string, name: string) => fail('rename_album', { p_album: id, p_name: name }),
-    remove: (id: string) => fail('delete_album', { p_album: id }),
+    // Goes through the server so photos uploaded directly to the album are also deleted from storage.
+    remove: async (id: string) => {
+      const r = await api('/api/delete-album', { id });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) await refresh();
+      return r.ok ? null : ((j.error as string) ?? 'Could not delete the album');
+    },
+    share: (id: string, userId: string) => fail('add_album_member', { p_album: id, p_user: userId }),
+    saveToLibrary: (photoId: string) => fail('move_to_library', { p_photo: photoId }),
     leave: (id: string) => fail('leave_album', { p_album: id }),
     addPhotos: (id: string, photoIds: string[]) => fail('add_photos_to_album', { p_album: id, p_photo_ids: photoIds }),
     removePhoto: (id: string, photoId: string) => fail('remove_photo_from_album', { p_album: id, p_photo: photoId }),

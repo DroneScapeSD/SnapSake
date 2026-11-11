@@ -1,7 +1,8 @@
 import { api } from '@/lib/ui';
 import { saveBlob, toPngBlob } from '@/lib/download';
 
-export type Photo = { id: string; owner_id: string; filename: string; size_bytes: number };
+// in_library = false means the photo was uploaded straight into an album and is kept out of My Uploads.
+export type Photo = { id: string; owner_id: string; filename: string; size_bytes: number; in_library: boolean };
 
 // Short-lived (5 min) signed image links for any photos the signed-in user is allowed to see.
 export async function signedUrls(ids: string[]): Promise<Record<string, string>> {

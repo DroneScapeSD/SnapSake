@@ -1,11 +1,12 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
 import { albumLink, type Album, type Albums } from '@/lib/albums';
 import { downloadPhoto, type Photo } from '@/lib/photos';
-import { field, label, panel, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
+import type { Friendship } from '@/lib/friends';
+import { api, field, label, panel, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
 
 const small = 'rounded-full px-4 py-1.5 text-sm font-medium transition disabled:opacity-50';
 const smallGhost = `${small} border border-fg/15 text-fg hover:bg-fg/10`;
@@ -45,7 +46,9 @@ function PhotoPicker({ title, confirmLabel, askName, photos, urls, onClose, onCo
           </div>
         )}
         {photos.length === 0 ? (
-          <p className="px-5 py-16 text-center text-sm text-fg/50">No photos available. Upload some photos first.</p>
+          <p className="px-5 py-16 text-center text-sm text-fg/50">
+            {askName ? 'No photos in My Uploads yet. Create the album now, then upload photos straight into it.' : 'No photos in My Uploads to add.'}
+          </p>
         ) : (
           <div className="grid flex-1 grid-cols-3 gap-2 overflow-y-auto p-5 pt-2 sm:grid-cols-4 md:grid-cols-5">
             {photos.map((p) => {
@@ -63,7 +66,7 @@ function PhotoPicker({ title, confirmLabel, askName, photos, urls, onClose, onCo
         <div className="flex items-center justify-between gap-3 border-t border-fg/10 p-4">
           <button className={`${label} text-fg/60 transition hover:text-fg disabled:opacity-40`} disabled={photos.length === 0}
             onClick={() => setSel(all ? new Set() : new Set(photos.map((p) => p.id)))}>{all ? 'Clear' : 'Select all'}</button>
-          <button className={pillPrimary} disabled={busy || sel.size === 0}
+          <button className={pillPrimary} disabled={busy || (!askName && sel.size === 0)}
             onClick={async () => { setBusy(true); await onConfirm(name, [...sel]); setBusy(false); }}>
             {busy ? 'Saving...' : `${confirmLabel}${sel.size ? ` (${sel.size})` : ''}`}
           </button>
@@ -73,20 +76,77 @@ function PhotoPicker({ title, confirmLabel, askName, photos, urls, onClose, onCo
   );
 }
 
-export function AlbumsView({ uid, albums, photos, urls, say }: {
+// Friends checklist: ticking a friend adds them to the album, unticking removes them.
+// People who joined through the link but aren't friends stay listed so they can still be removed.
+function ShareList({ album, friends, albums, say, onOpenFriends }: {
+  album: Album; friends: Friendship[]; albums: Albums; say: (m: string) => void; onOpenFriends: () => void;
+}) {
+  const [pending, setPending] = useState<Record<string, boolean>>({}); // optimistic tick while saving
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const member = new Set(album.members.map((m) => m.user_id));
+  const rows = [
+    ...friends.map((f) => ({ id: f.user_id, email: f.email, viaLink: false })),
+    ...album.members.filter((m) => !friends.some((f) => f.user_id === m.user_id)).map((m) => ({ id: m.user_id, email: m.email, viaLink: true })),
+  ];
+
+  async function toggle(id: string, on: boolean) {
+    if (busyId) return;
+    setBusyId(id); setPending({ [id]: on });
+    const err = on ? await albums.share(album.id, id) : await albums.removeMember(album.id, id);
+    if (err) say(err);
+    setPending({}); setBusyId(null);
+  }
+
+  return (
+    <div>
+      <p className={`${label} text-fg/50`}>Share with friends</p>
+      {rows.length === 0 ? (
+        <div className="mt-3 rounded-xl border border-dashed border-fg/15 p-4 text-center">
+          <p className="text-sm text-fg/55">You don&apos;t have any friends yet.</p>
+          <button className={`${pillGhost} mt-3 !px-4 !py-2`} onClick={onOpenFriends}>Add friends</button>
+        </div>
+      ) : (
+        <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
+          {rows.map((r) => {
+            const on = pending[r.id] ?? member.has(r.id);
+            return (
+              <li key={r.id}>
+                <label className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-fg/[0.06] ${on ? 'bg-fg/[0.05]' : ''} ${busyId ? 'opacity-70' : ''}`}>
+                  <input type="checkbox" className="h-4 w-4 shrink-0 accent-accent" checked={on} disabled={!!busyId} onChange={(e) => toggle(r.id, e.target.checked)} />
+                  <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.email[0]}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm">{r.email}</span>
+                  {r.viaLink && <span className="shrink-0 text-xs text-fg/40">joined by link</span>}
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFriends, onUpload, busy, full, reload }: {
   uid: string;
   albums: Albums;
   photos: Photo[]; // every photo this user can see (own, shared with them, and in their albums)
   urls: Record<string, string>;
   say: (m: string) => void;
+  friends: Friendship[]; // accepted friends, for the share checklist
+  onOpenFriends: () => void;
+  onUpload: (albumId: string, files: FileList | File[] | null) => void; // upload straight into an album
+  busy: number; // uploads in progress
+  full: boolean; // storage limit reached
+  reload: () => void; // re-fetch photos (after deleting or saving one)
 }) {
   const { prefs } = usePrefs();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [picker, setPicker] = useState<'new' | 'add' | null>(null);
   const [viewer, setViewer] = useState<string | null>(null); // id of the photo open in the viewer
   const [downloading, setDownloading] = useState(false);
 
   const byId = useMemo(() => new Map(photos.map((p) => [p.id, p])), [photos]);
-  const mine = useMemo(() => photos.filter((p) => p.owner_id === uid), [photos, uid]);
+  const mine = useMemo(() => photos.filter((p) => p.owner_id === uid && p.in_library), [photos, uid]); // what "add from My Uploads" can offer
   const open = albums.items.find((a) => a.id === albums.openId) ?? null;
   const openPhotos = open ? open.photo_ids.map((id) => byId.get(id)).filter((p): p is Photo => !!p) : [];
   const viewerIndex = viewer ? openPhotos.findIndex((p) => p.id === viewer) : -1;
@@ -118,8 +178,12 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
     done(await albums.rename(a.id, n), 'Album renamed');
   }
   async function del(a: Album) {
-    if (!confirm(`Delete the album "${a.name}"? Your photos stay in your library, but everyone loses access through this album.`)) return;
-    if (done(await albums.remove(a.id), 'Album deleted')) albums.setOpenId(null);
+    const direct = openPhotos.filter((p) => p.owner_id === uid && !p.in_library).length; // uploaded straight into this album
+    const what = direct
+      ? `The ${plural(direct, 'photo')} uploaded directly to this album will be deleted permanently. Photos from My Uploads stay.`
+      : 'Your photos stay in My Uploads.';
+    if (!confirm(`Delete the album "${a.name}"? ${what} Everyone loses access through this album.`)) return;
+    if (done(await albums.remove(a.id), 'Album deleted')) { albums.setOpenId(null); reload(); }
   }
   async function leave(a: Album) {
     if (!confirm(`Leave "${a.name}"? You can rejoin later with the link.`)) return;
@@ -129,13 +193,20 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
     if (!confirm('Reset the link? The old link stops working for new people. Current members keep access.')) return;
     done(await albums.resetLink(a.id), 'New link ready. Copy it again to share.');
   }
-  async function removeMember(a: Album, userId: string, email: string) {
-    if (!confirm(`Remove ${email} from this album?`)) return;
-    done(await albums.removeMember(a.id, userId), 'Member removed');
-  }
   async function removePhoto(a: Album, id: string) {
     if (!confirm('Remove this photo from the album? It stays in your library.')) return;
     if (done(await albums.removePhoto(a.id, id), 'Removed from album')) setViewer(null);
+  }
+  // Photos uploaded straight into the album have no other home, so they can be kept (saved to My Uploads) or deleted.
+  async function saveToLibrary(p: Photo) {
+    if (done(await albums.saveToLibrary(p.id), 'Saved to My Uploads')) reload();
+  }
+  async function deletePhoto(p: Photo) {
+    if (!confirm('Delete this photo permanently? It only exists in this album.')) return;
+    const r = await api('/api/delete', { id: p.id });
+    if (!r.ok) return say("Couldn't delete this photo");
+    setViewer(null); say('Photo deleted');
+    await albums.refresh(); reload();
   }
   async function download(p: Photo) {
     setDownloading(true);
@@ -160,8 +231,12 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
           </div>
           {open.is_owner ? (
             <div className="flex flex-wrap gap-2">
-              <button className={`${pillPrimary} !px-4 !py-2`} onClick={() => setPicker('add')}>Add photos</button>
+              <button className={`${pillPrimary} !px-4 !py-2`} disabled={full} onClick={() => fileRef.current?.click()}>
+                {full ? 'Storage full' : busy ? `Uploading ${busy}...` : 'Upload photos'}
+              </button>
+              <button className={`${pillGhost} !px-4 !py-2`} onClick={() => setPicker('add')}>Add from My Uploads</button>
               <button className={`${pillGhost} !px-4 !py-2`} onClick={() => rename(open)}>Rename</button>
+              <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { onUpload(open.id, e.target.files); e.target.value = ''; }} />
             </div>
           ) : (
             <button className={`${pillGhost} !px-4 !py-2`} onClick={() => leave(open)}>Leave album</button>
@@ -171,29 +246,14 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
         {open.is_owner && (
           <section className={`${panel} space-y-5 p-5`}>
             <div>
-              <p className={`${label} text-fg/50`}>Share link</p>
+              <p className={`${label} text-fg/50`}>Share with a link</p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input readOnly className={field} value={link} onFocus={(e) => e.target.select()} aria-label="Album share link" />
                 <button className={`${pillPrimary} shrink-0`} onClick={() => copy(open)}>Copy link</button>
               </div>
               <p className="mt-2 text-xs text-fg/40">Anyone who opens this link and logs in (or creates an account) is added to this album automatically, and can view and download its photos.</p>
             </div>
-            <div>
-              <p className={`${label} text-fg/50`}>Members ({open.members.length})</p>
-              {open.members.length === 0 ? (
-                <p className="mt-2 text-sm text-fg/45">Nobody has joined yet.</p>
-              ) : (
-                <ul className="mt-2 space-y-1.5">
-                  {open.members.map((m) => (
-                    <li key={m.user_id} className="flex items-center gap-3 rounded-xl bg-fg/[0.04] px-3 py-2">
-                      <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{m.email[0]}</span>
-                      <span className="min-w-0 flex-1 truncate text-sm">{m.email}</span>
-                      <button className={smallDanger} onClick={() => removeMember(open, m.user_id, m.email)}>Remove</button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <ShareList album={open} friends={friends} albums={albums} say={say} onOpenFriends={onOpenFriends} />
             <div className="flex flex-wrap gap-2 border-t border-fg/10 pt-4">
               <button className={smallGhost} onClick={() => reset(open)}>Reset link</button>
               <button className={smallDanger} onClick={() => del(open)}>Delete album</button>
@@ -204,7 +264,7 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
         {open.photo_ids.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-fg/15 px-6 py-24 text-center">
             <p className={`${serif.className} text-4xl italic text-fg/80`}>This album is empty.</p>
-            {open.is_owner && <p className="mt-3 text-sm text-fg/45">Use Add photos to put some of your photos in it.</p>}
+            {open.is_owner && <p className="mt-3 text-sm text-fg/45">Upload photos straight into it, or add some from My Uploads.</p>}
           </div>
         ) : (
           <div className={photoGrid(prefs.density === 'compact')}>
@@ -240,14 +300,23 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
                   <button aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fg/15 text-fg/60 transition hover:bg-fg/10 hover:text-fg" onClick={() => setViewer(null)}>✕</button>
                 </div>
                 <button className={`${pillPrimary} w-full !py-2.5`} onClick={() => download(viewing)} disabled={downloading}>{downloading ? 'Preparing...' : 'Download PNG'}</button>
-                {open.is_owner && <button className="w-full rounded-full border border-fg/15 py-2.5 text-sm text-fg/80 transition hover:bg-fg/10" onClick={() => removePhoto(open, viewing.id)}>Remove from album</button>}
+                {open.is_owner && viewing.in_library && (
+                  <button className="w-full rounded-full border border-fg/15 py-2.5 text-sm text-fg/80 transition hover:bg-fg/10" onClick={() => removePhoto(open, viewing.id)}>Remove from album</button>
+                )}
+                {open.is_owner && !viewing.in_library && (
+                  <>
+                    <p className="text-xs text-fg/45">Uploaded straight to this album, so it isn&apos;t in My Uploads.</p>
+                    <button className="w-full rounded-full border border-fg/15 py-2.5 text-sm text-fg/80 transition hover:bg-fg/10" onClick={() => saveToLibrary(viewing)}>Save to My Uploads</button>
+                    <button className="w-full rounded-full border border-red-500/30 py-2.5 text-sm text-red-500 transition hover:bg-red-500/10" onClick={() => deletePhoto(viewing)}>Delete photo</button>
+                  </>
+                )}
               </aside>
             </div>
           </div>
         )}
 
         {picker === 'add' && (
-          <PhotoPicker title="Add photos to this album" confirmLabel="Add" photos={mine.filter((p) => !open.photo_ids.includes(p.id))} urls={urls}
+          <PhotoPicker title="Add photos from My Uploads" confirmLabel="Add" photos={mine.filter((p) => !open.photo_ids.includes(p.id))} urls={urls}
             onClose={() => setPicker(null)}
             onConfirm={async (_n, ids) => { if (done(await albums.addPhotos(open.id, ids), `Added ${plural(ids.length, 'photo')}`)) setPicker(null); }} />
         )}
@@ -259,7 +328,7 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-fg/50">Group photos into an album, then share it with a link.</p>
+        <p className="text-sm text-fg/50">Group photos into an album, then share it with friends or a link.</p>
         <button className={`${pillPrimary} !px-5 !py-2.5`} onClick={() => setPicker('new')}>New album</button>
       </div>
 
@@ -273,7 +342,7 @@ export function AlbumsView({ uid, albums, photos, urls, say }: {
       ) : albums.items.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-fg/15 px-6 py-28 text-center">
           <p className={`${serif.className} text-4xl italic text-fg/80`}>No albums yet.</p>
-          <p className="mt-3 text-sm text-fg/45">Upload several photos at once and you&apos;ll be offered an album, or tap New album.</p>
+          <p className="mt-3 text-sm text-fg/45">Choose several photos at once and you&apos;ll be offered an album, or tap New album.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

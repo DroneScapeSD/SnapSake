@@ -1,6 +1,10 @@
 -- Run once in Supabase > SQL Editor (after schema.sql and friends_and_tiers.sql). Safe to re-run.
 -- Adds albums: a named set of your photos that people can join through a link.
 
+-- Photos uploaded straight into an album are stored once and have in_library = false, so they don't show in My Uploads.
+-- "Save to My Uploads" flips it to true. Photos from your library keep in_library = true when added to an album.
+alter table photos add column if not exists in_library boolean not null default true;
+
 create table if not exists albums (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references profiles on delete cascade,
@@ -73,6 +77,10 @@ create or replace function remove_photo_from_album(p_album uuid, p_photo uuid) r
 begin
   perform 1 from albums where id = p_album and owner_id = auth.uid();
   if not found then raise exception 'Not your album'; end if;
+  -- A photo that only exists in this album would be orphaned (invisible but still using space), so it must be deleted or saved instead.
+  if exists (select 1 from photos where id = p_photo and in_library = false) then
+    raise exception 'This photo only exists in this album. Delete it or save it to My Uploads instead.';
+  end if;
   delete from album_photos where album_id = p_album and photo_id = p_photo;
 end $$;
 
@@ -87,8 +95,31 @@ end $$;
 -- Deletes the album only; the photos stay in their owners' libraries.
 create or replace function delete_album(p_album uuid) returns void language plpgsql security definer set search_path=public as $$
 begin
+  -- The app deletes albums through /api/delete-album, which also removes the stored files of photos uploaded directly to the album.
+  if exists (select 1 from album_photos ap join photos p on p.id = ap.photo_id where ap.album_id = p_album and p.in_library = false) then
+    raise exception 'This album has photos uploaded directly to it. Delete the album from the app so they are cleaned up.';
+  end if;
   delete from albums where id = p_album and owner_id = auth.uid();
   if not found then raise exception 'Not your album'; end if;
+end $$;
+
+-- Share with a friend from the checklist. Friends only; people who join through the link don't need to be friends.
+create or replace function add_album_member(p_album uuid, p_user uuid) returns void language plpgsql security definer set search_path=public as $$
+begin
+  perform 1 from albums where id = p_album and owner_id = auth.uid();
+  if not found then raise exception 'Not your album'; end if;
+  if not exists (select 1 from friendships f where f.status = 'accepted'
+      and ((f.requester_id = auth.uid() and f.addressee_id = p_user) or (f.requester_id = p_user and f.addressee_id = auth.uid()))) then
+    raise exception 'You can only share albums with friends';
+  end if;
+  insert into album_members (album_id, user_id) values (p_album, p_user) on conflict do nothing;
+end $$;
+
+-- Turns a photo that was uploaded straight into an album into a normal My Uploads photo (it stays in the album too).
+create or replace function move_to_library(p_photo uuid) returns void language plpgsql security definer set search_path=public as $$
+begin
+  update photos set in_library = true where id = p_photo and owner_id = auth.uid();
+  if not found then raise exception 'Photo not found'; end if;
 end $$;
 
 -- Opening a share link calls this. Safe to call repeatedly; the owner and existing members are left alone.
@@ -149,9 +180,9 @@ $$;
 -- Only signed-in users may call these (auth.uid() is null for anon).
 revoke execute on function create_album(text, uuid[]), add_photos_to_album(uuid, uuid[]), remove_photo_from_album(uuid, uuid),
   rename_album(uuid, text), delete_album(uuid), join_album(text), leave_album(uuid), remove_album_member(uuid, uuid),
-  reset_album_link(uuid), albums_overview() from public, anon;
+  reset_album_link(uuid), albums_overview(), add_album_member(uuid, uuid), move_to_library(uuid) from public, anon;
 grant execute on function create_album(text, uuid[]), add_photos_to_album(uuid, uuid[]), remove_photo_from_album(uuid, uuid),
   rename_album(uuid, text), delete_album(uuid), join_album(text), leave_album(uuid), remove_album_member(uuid, uuid),
-  reset_album_link(uuid), albums_overview() to authenticated;
+  reset_album_link(uuid), albums_overview(), add_album_member(uuid, uuid), move_to_library(uuid) to authenticated;
 
 notify pgrst, 'reload schema';
