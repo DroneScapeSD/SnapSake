@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 const sans = Inter_Tight({ subsets: ['latin'], display: 'swap' });
 const serif = Instrument_Serif({ subsets: ['latin'], weight: '400', style: ['normal', 'italic'], display: 'swap' });
 
-const APP = 'PhotoApp'; // change to your app's name
+const APP = 'Tandem'; // change to your app's name
 const QUOTA = 3 * 1024 ** 3;
 const LIMIT = 3;
 type Photo = { id: string; owner_id: string; filename: string; size_bytes: number };
