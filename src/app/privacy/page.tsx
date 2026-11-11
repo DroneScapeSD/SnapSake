@@ -31,9 +31,10 @@ export default function PrivacyPolicy() {
         <Bullets
           items={[
             <>
-              <strong className="font-medium text-fg">Account details.</strong> Your email address and a
-              password. Passwords are hashed by our authentication provider — we never see or store the
-              password itself.
+              <strong className="font-medium text-fg">Account details.</strong> Your username, your email
+              address and a password. Your username is shown to other people (for example when they add
+              you as a friend or you share a photo); your email address is not. Passwords are hashed by
+              our authentication provider — we never see or store the password itself.
             </>,
             <>
               <strong className="font-medium text-fg">Your photos.</strong> The files you upload, their

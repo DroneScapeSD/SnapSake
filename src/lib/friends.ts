@@ -6,7 +6,7 @@ export type Friendship = {
   status: 'pending' | 'accepted';
   direction: 'in' | 'out'; // 'in' = they asked you, 'out' = you asked them
   user_id: string;
-  email: string;
+  username: string;
   created_at: string;
 };
 
@@ -36,7 +36,7 @@ export function useFriends(uid: string | null) {
     if (!error) await refresh();
     return error?.message ?? null;
   };
-  const send = (email: string) => run(supabase.rpc('send_friend_request', { p_email: email }));
+  const send = (username: string) => run(supabase.rpc('send_friend_request', { p_username: username }));
   const respond = (id: string, accept: boolean) => run(supabase.rpc('respond_friend_request', { p_id: id, p_accept: accept }));
   const remove = (id: string) => run(supabase.rpc('remove_friendship', { p_id: id })); // cancel a sent request, or unfriend
 

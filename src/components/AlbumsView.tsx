@@ -6,6 +6,7 @@ import { serif } from '@/lib/fonts';
 import { albumLink, type Album, type Albums } from '@/lib/albums';
 import { downloadPhoto, type Photo } from '@/lib/photos';
 import type { Friendship } from '@/lib/friends';
+import { handle } from '@/lib/username';
 import { api, field, label, panel, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
 
 const small = 'rounded-full px-4 py-1.5 text-sm font-medium transition disabled:opacity-50';
@@ -85,8 +86,8 @@ function ShareList({ album, friends, albums, say, onOpenFriends }: {
   const [busyId, setBusyId] = useState<string | null>(null);
   const member = new Set(album.members.map((m) => m.user_id));
   const rows = [
-    ...friends.map((f) => ({ id: f.user_id, email: f.email, viaLink: false })),
-    ...album.members.filter((m) => !friends.some((f) => f.user_id === m.user_id)).map((m) => ({ id: m.user_id, email: m.email, viaLink: true })),
+    ...friends.map((f) => ({ id: f.user_id, username: f.username, viaLink: false })),
+    ...album.members.filter((m) => !friends.some((f) => f.user_id === m.user_id)).map((m) => ({ id: m.user_id, username: m.username, viaLink: true })),
   ];
 
   async function toggle(id: string, on: boolean) {
@@ -113,8 +114,8 @@ function ShareList({ album, friends, albums, say, onOpenFriends }: {
               <li key={r.id}>
                 <label className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-fg/[0.06] ${on ? 'bg-fg/[0.05]' : ''} ${busyId ? 'opacity-70' : ''}`}>
                   <input type="checkbox" className="h-4 w-4 shrink-0 accent-accent" checked={on} disabled={!!busyId} onChange={(e) => toggle(r.id, e.target.checked)} />
-                  <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.email[0]}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm">{r.email}</span>
+                  <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.username[0]}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm">{handle(r.username)}</span>
                   {r.viaLink && <span className="shrink-0 text-xs text-fg/40">joined by link</span>}
                 </label>
               </li>
@@ -226,7 +227,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
             <button className={`${label} text-fg/50 transition hover:text-fg`} onClick={() => albums.setOpenId(null)}>← All albums</button>
             <h3 className="mt-3 break-words text-3xl font-semibold tracking-tight">{open.name}</h3>
             <p className="mt-1 text-sm text-fg/50">
-              {plural(open.photo_ids.length, 'photo')} · {open.is_owner ? 'Created by you' : `Shared by ${open.owner_email}`}
+              {plural(open.photo_ids.length, 'photo')} · {open.is_owner ? 'Created by you' : `Shared by ${handle(open.owner_username)}`}
             </p>
           </div>
           {open.is_owner ? (
@@ -357,7 +358,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
                   <p className="truncate text-sm font-medium text-white">{a.name}</p>
                   <p className="truncate text-xs text-white/70">
                     {plural(a.photo_ids.length, 'photo')}
-                    {a.is_owner ? (a.member_count > 0 ? ` · ${a.member_count} joined` : '') : ` · from ${a.owner_email}`}
+                    {a.is_owner ? (a.member_count > 0 ? ` · ${a.member_count} joined` : '') : ` · from ${handle(a.owner_username)}`}
                   </p>
                 </div>
               </button>

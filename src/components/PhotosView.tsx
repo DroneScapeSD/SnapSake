@@ -6,12 +6,13 @@ import { serif } from '@/lib/fonts';
 import { compressImage } from '@/lib/compress';
 import { downloadPhoto, signedUrls, type Photo } from '@/lib/photos';
 import type { Friendship } from '@/lib/friends';
+import { handle } from '@/lib/username';
 import type { Albums } from '@/lib/albums';
 import { AlbumsView } from '@/components/AlbumsView';
 import { LIMIT, QUOTA, api, field, label, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
 
 export type PhotoTab = 'mine' | 'shared' | 'albums';
-type Info = { recipients: { id: string; email: string }[]; used: number };
+type Info = { recipients: { id: string; username: string }[]; used: number };
 
 async function sha256(f: File) {
   const buf = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
@@ -159,11 +160,11 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
   async function refreshInfo() { if (open) { const { data } = await supabase.rpc('share_info', { p_photo_id: open.id }); setInfo(data); } }
 
   // Checking a friend shares the photo with them; unchecking removes their access.
-  async function toggleShare(userId: string, email: string, on: boolean) {
+  async function toggleShare(userId: string, username: string, on: boolean) {
     if (!open || sharing) return;
     setSharing(userId); setPending({ [userId]: on }); // tick instantly; the server result below corrects it if it fails
     const { error } = on
-      ? await supabase.rpc('share_photo', { p_photo_id: open.id, p_email: email })
+      ? await supabase.rpc('share_photo', { p_photo_id: open.id, p_username: username })
       : await supabase.rpc('unshare_photo', { p_photo_id: open.id, p_recipient: userId });
     if (error) say(error.message);
     await refreshInfo();
@@ -317,7 +318,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                       // Friends first; anyone it was shared with before who isn't (or is no longer) a friend stays listed so you can still remove them.
                       const shared = new Set(info?.recipients.map((r) => r.id));
                       const rows = [
-                        ...friends.map((f) => ({ id: f.user_id, email: f.email })),
+                        ...friends.map((f) => ({ id: f.user_id, username: f.username })),
                         ...(info?.recipients.filter((r) => !friends.some((f) => f.user_id === r.id)) ?? []),
                       ];
                       if (!info) return <div className="mt-3 space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-11 animate-pulse rounded-xl bg-fg/[0.06]" />)}</div>;
@@ -333,9 +334,9 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                             <li key={r.id}>
                               <label className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-fg/[0.06] ${(pending[r.id] ?? shared.has(r.id)) ? 'bg-fg/[0.05]' : ''} ${sharing ? 'opacity-70' : ''}`}>
                                 <input type="checkbox" className="h-4 w-4 shrink-0 accent-accent" checked={pending[r.id] ?? shared.has(r.id)} disabled={!!sharing}
-                                  onChange={(e) => toggleShare(r.id, r.email, e.target.checked)} />
-                                <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.email[0]}</span>
-                                <span className="min-w-0 flex-1 truncate text-sm">{r.email}</span>
+                                  onChange={(e) => toggleShare(r.id, r.username, e.target.checked)} />
+                                <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.username[0]}</span>
+                                <span className="min-w-0 flex-1 truncate text-sm">{handle(r.username)}</span>
                               </label>
                             </li>
                           ))}

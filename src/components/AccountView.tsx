@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { serif } from '@/lib/fonts';
 import { LIMIT, MAX_FILE, QUOTA, field, label, panel, pillGhost, pillPrimary, size } from '@/lib/ui';
+import { handle } from '@/lib/username';
 
 function accountAge(iso: string) {
   const start = new Date(iso);
@@ -44,8 +45,8 @@ function Info({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export function AccountView({ user, tier, used, friendCount, say, onLogout }: {
-  user: User; tier: string; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void;
+export function AccountView({ user, username, tier, used, friendCount, say, onLogout }: {
+  user: User; username: string; tier: string; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void;
 }) {
   const [photoCount, setPhotoCount] = useState<number | null>(null);
   const [pw, setPw] = useState('');
@@ -72,7 +73,7 @@ export function AccountView({ user, tier, used, friendCount, say, onLogout }: {
         <h2 className="text-[clamp(2.5rem,7vw,5rem)] font-semibold leading-none tracking-tight">
           Your <span className={`${serif.className} font-normal italic`}>account</span>
         </h2>
-        <p className="mt-3 truncate text-sm text-fg/50">{user.email}</p>
+        <p className="mt-3 truncate text-sm text-fg/50">{username && handle(username)}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -103,6 +104,7 @@ export function AccountView({ user, tier, used, friendCount, say, onLogout }: {
       <section>
         <h3 className={`${label} mb-3 text-fg/50`}>Account info</h3>
         <div className={`${panel} divide-y divide-fg/10`}>
+          <Info title="Username"><span className="block truncate">{username && handle(username)}</span></Info>
           <Info title="Email"><span className="block truncate">{user.email}</span></Info>
           <Info title="Member since">{joined.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</Info>
           <Info title="User ID"><code className="block truncate text-xs text-fg/60">{user.id}</code></Info>

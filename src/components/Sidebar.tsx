@@ -1,6 +1,7 @@
 'use client';
 import { APP, QUOTA, label, size } from '@/lib/ui';
 import { serif } from '@/lib/fonts';
+import { handle } from '@/lib/username';
 import { Icon, type IconName } from './icons';
 
 export type View = 'photos' | 'friends' | 'settings' | 'account';
@@ -9,14 +10,14 @@ export const VIEW_TITLES: Record<View, string> = { photos: 'Photos', friends: 'F
 
 const ICONS: Record<View, IconName> = { photos: 'photos', friends: 'friends', settings: 'settings', account: 'account' };
 
-export function Sidebar({ view, onNavigate, open, onClose, badges, used, email, onLogout }: {
+export function Sidebar({ view, onNavigate, open, onClose, badges, used, username, onLogout }: {
   view: View;
   onNavigate: (v: View) => void;
   open: boolean; // mobile drawer state
   onClose: () => void;
   badges: Partial<Record<View, number>>;
   used: number;
-  email: string;
+  username: string;
   onLogout: () => void;
 }) {
   const pct = Math.min(100, (used / QUOTA) * 100);
@@ -60,7 +61,7 @@ export function Sidebar({ view, onNavigate, open, onClose, badges, used, email, 
             <div className="mt-1.5 h-[3px] rounded-full bg-fg/10"><div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} /></div>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <p className="min-w-0 truncate text-xs text-fg/45" title={email}>{email}</p>
+            <p className="min-w-0 truncate text-xs text-fg/45" title={username && handle(username)}>{username && handle(username)}</p>
             <button className={`${label} shrink-0 text-fg/60 transition hover:text-fg`} onClick={onLogout}>Log out</button>
           </div>
         </div>

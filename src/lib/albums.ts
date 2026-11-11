@@ -6,12 +6,12 @@ export type Album = {
   id: string;
   name: string;
   is_owner: boolean;
-  owner_email: string;
+  owner_username: string;
   created_at: string;
   share_token: string | null; // only the owner receives this
   photo_ids: string[]; // newest first
   member_count: number;
-  members: { user_id: string; email: string }[]; // only filled in for the owner
+  members: { user_id: string; username: string }[]; // only filled in for the owner
 };
 
 // ---- Share links: https://your-site/?join=<token> ----

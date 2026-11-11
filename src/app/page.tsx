@@ -6,6 +6,7 @@ import { PrefsProvider } from '@/lib/prefs';
 import { useFriends } from '@/lib/friends';
 import { captureAlbumInvite, clearPendingAlbum, getPendingAlbum, useAlbums } from '@/lib/albums';
 import { useProfile } from '@/lib/profile';
+import { checkUsername, handle, normalizeUsername } from '@/lib/username';
 import { sans, serif } from '@/lib/fonts';
 import { APP, field, label, pillGhost, pillPrimary } from '@/lib/ui';
 import { Icon } from '@/components/icons';
@@ -29,8 +30,13 @@ export default function Page() {
 function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
-  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [who, setWho] = useState(''); // log in: username or email
+  const [username, setUsername] = useState(''); // sign up
+  const [email, setEmail] = useState(''); // sign up
   const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [taken, setTaken] = useState(''); // a username the server said is already in use
   const [toast, setToast] = useState('');
   const [view, setView] = useState<View>(initialView);
   const [navOpen, setNavOpen] = useState(false);
@@ -73,10 +79,53 @@ function Home() {
     history.replaceState(null, '', `#${v}`); // so a refresh stays on the same section
   }
 
-  async function auth(signup: boolean) {
-    const { error } = signup ? await supabase.auth.signUp({ email, password: pw }) : await supabase.auth.signInWithPassword({ email, password: pw });
-    if (error) say(error.message);
+  // Log in with a username (the @ is optional) or, as a fallback, an email address.
+  async function login() {
+    const id = who.trim().replace(/^@/, '');
+    if (!id || !pw) return say('Enter your username and password');
+    setBusy(true);
+    try {
+      if (id.includes('@')) { // an email address; usernames can never contain @
+        const { error } = await supabase.auth.signInWithPassword({ email: id, password: pw });
+        if (error) say(error.message);
+        return;
+      }
+      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: id, password: pw }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) return say(out.error ?? 'Could not log in');
+      const { error } = await supabase.auth.setSession({ access_token: out.access_token, refresh_token: out.refresh_token });
+      if (error) say(error.message);
+    } finally { setBusy(false); }
   }
+
+  // Looks the name up on blur, so people hear "taken" before they fill in the rest.
+  async function checkTaken() {
+    const n = normalizeUsername(username);
+    if (checkUsername(n)) return;
+    const { data } = await supabase.rpc('username_available', { p_username: n });
+    setTaken(data === false ? n : '');
+  }
+
+  async function signup() {
+    const bad = checkUsername(username);
+    if (bad) return say(bad);
+    if (!email.trim()) return say('Enter your email address');
+    if (!pw) return say('Choose a password');
+    const name = normalizeUsername(username);
+    setBusy(true);
+    try {
+      const { data: free, error: lookup } = await supabase.rpc('username_available', { p_username: name });
+      if (lookup) return say(lookup.message);
+      if (free === false) { setTaken(name); return say(`${handle(name)} is already taken`); }
+      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: pw, options: { data: { username: name } } });
+      if (error) return say(/database error/i.test(error.message) ? `${handle(name)} was just taken. Try another username` : error.message);
+      if (!data.session) say('Check your email to confirm your account, then log in');
+    } finally { setBusy(false); }
+  }
+
+  const signingUp = mode === 'signup';
+  const switchMode = () => { setMode(signingUp ? 'login' : 'signup'); setPw(''); };
+  const nameProblem = username && (checkUsername(username) ?? (taken === normalizeUsername(username) ? `${handle(taken)} is already taken` : null));
   const logout = () => supabase.auth.signOut();
 
   if (!ready) return null;
@@ -101,15 +150,33 @@ function Home() {
         </section>
         <section>
           <div className="rounded-3xl border border-fg/10 bg-fg/[0.03] p-8 backdrop-blur">
-            <h2 className="text-2xl font-semibold tracking-tight">Welcome</h2>
-            <p className="mt-1 text-sm text-fg/50">Log in or create an account.</p>
+            <h2 className="text-2xl font-semibold tracking-tight">{signingUp ? 'Create your account' : 'Welcome'}</h2>
+            <p className="mt-1 text-sm text-fg/50">{signingUp ? 'Pick a username, then add your email and a password.' : 'Log in with your username or email.'}</p>
             {invite && <p className="mt-4 rounded-xl bg-accent/15 px-4 py-3 text-sm text-accent-text">Someone shared an album with you. Log in or create an account to open it.</p>}
-            <div className="mt-6 space-y-3">
-              <input className={field} type="email" autoComplete="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <input className={field} type="password" autoComplete="current-password" placeholder="Password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && auth(false)} />
-              <button className={`${pillPrimary} w-full`} onClick={() => auth(false)}>Log in</button>
-              <button className={`${pillGhost} w-full`} onClick={() => auth(true)}>Create account</button>
-            </div>
+            <form className="mt-6 space-y-3" onSubmit={(e) => { e.preventDefault(); if (!busy) (signingUp ? signup() : login()); }}>
+              {signingUp ? (
+                <>
+                  <div>
+                    <div className="relative">
+                      <span aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-fg/40">@</span>
+                      <input className={`${field} !pl-9`} type="text" name="username" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="username" aria-label="Username"
+                        value={username} onChange={(e) => setUsername(e.target.value.replace(/^@/, ''))} onBlur={checkTaken} />
+                    </div>
+                    <p className={`mt-1.5 px-1 text-xs ${nameProblem ? 'text-red-500' : 'text-fg/40'}`}>{nameProblem || 'At least 3 characters. Letters and numbers only.'}</p>
+                  </div>
+                  <input className={field} type="email" name="email" autoComplete="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input className={field} type="password" name="password" autoComplete="new-password" placeholder="Password" value={pw} onChange={(e) => setPw(e.target.value)} />
+                </>
+              ) : (
+                <>
+                  <input className={field} type="text" name="username" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Username or email" aria-label="Username or email"
+                    value={who} onChange={(e) => setWho(e.target.value)} />
+                  <input className={field} type="password" name="password" autoComplete="current-password" placeholder="Password" value={pw} onChange={(e) => setPw(e.target.value)} />
+                </>
+              )}
+              <button type="submit" className={`${pillPrimary} w-full`} disabled={busy}>{signingUp ? 'Create account' : 'Log in'}</button>
+              <button type="button" className={`${pillGhost} w-full`} onClick={switchMode}>{signingUp ? 'I already have an account' : 'Create account'}</button>
+            </form>
           </div>
         </section>
       </div>
@@ -123,7 +190,7 @@ function Home() {
       <Sidebar
         view={view} onNavigate={go} open={navOpen} onClose={() => setNavOpen(false)}
         badges={{ friends: friends.incoming.length }}
-        used={profile.used} email={user.email ?? ''} onLogout={logout}
+        used={profile.used} username={profile.username} onLogout={logout}
       />
 
       <div className="flex min-h-screen flex-col md:pl-64">
@@ -141,7 +208,7 @@ function Home() {
             tab={photoTab} onTab={setPhotoTab} albums={albums} used={profile.used} />
           {view === 'friends' && <FriendsView friends={friends} say={say} />}
           {view === 'settings' && <SettingsView />}
-          {view === 'account' && <AccountView user={user} tier={profile.tier} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
+          {view === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
         </main>
         <Footer />
       </div>
