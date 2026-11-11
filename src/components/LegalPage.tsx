@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { sans, serif } from '@/lib/fonts';
+import { SITE } from '@/lib/site';
 import { Footer } from './Footer';
 
 export function LegalPage({ title, accent, updated, children }: {
@@ -12,7 +13,7 @@ export function LegalPage({ title, accent, updated, children }: {
     <div className={`${sans.className} flex min-h-screen flex-col bg-bg text-fg`}>
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-12 md:px-8 md:py-16">
         <Link href="/" className="text-xs uppercase tracking-[0.2em] text-fg/45 transition hover:text-fg">
-          ← Back to {title === 'Privacy' ? 'Tandem' : 'Tandem'}
+          ← Back to {SITE.name}
         </Link>
 
         <header className="mt-8 border-b border-fg/10 pb-8">

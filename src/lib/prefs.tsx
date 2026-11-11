@@ -5,7 +5,7 @@ export type Theme = 'system' | 'dark' | 'light';
 export type Prefs = { theme: Theme; density: 'comfortable' | 'compact'; confirmDelete: boolean };
 
 export const DEFAULT_PREFS: Prefs = { theme: 'dark', density: 'comfortable', confirmDelete: true };
-const KEY = 'tandem-prefs'; // keep in sync with the inline script in app/layout.tsx
+const KEY = 'snapsake-prefs'; // keep in sync with the inline script in app/layout.tsx
 
 function read(): Prefs {
   if (typeof window === 'undefined') return DEFAULT_PREFS;

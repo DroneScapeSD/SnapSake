@@ -2,8 +2,8 @@
 // Change these values instead of editing the legal pages.
 
 export const SITE = {
-  name: 'Tandem',
+  name: 'SnapSake',
   // TODO: replace with a real address you control before sharing the app widely.
-  contact: 'hello@tandem.app',
+  contact: 'hello@snapsake.app',
   updated: '11 November 2026',
 };

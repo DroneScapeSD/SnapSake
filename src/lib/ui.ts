@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
+import { SITE } from '@/lib/site';
 
-export const APP = 'Tandem'; // change to your app's name
+export const APP = SITE.name; // change the name in lib/site.ts
 export const QUOTA = 3 * 1024 ** 3;
 export const LIMIT = 3;
 export const MAX_FILE = 15 * 1024 * 1024;

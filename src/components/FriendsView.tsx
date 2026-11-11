@@ -66,7 +66,7 @@ export function FriendsView({ friends: fr, say }: { friends: Friends; say: (m: s
           <input className={field} type="email" placeholder="friend@email.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
           <button className={`${pillPrimary} shrink-0`} onClick={add} disabled={pending === 'add'}>Send request</button>
         </div>
-        <p className="mt-2 text-xs text-fg/40">They need a Tandem account with this email.</p>
+        <p className="mt-2 text-xs text-fg/40">They need a SnapSake account with this email.</p>
       </div>
 
       <nav className="flex gap-8 border-b border-fg/10">
