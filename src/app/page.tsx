@@ -111,7 +111,7 @@ function Home() {
         </header>
 
         <main className="mx-auto max-w-6xl px-5 py-10">
-          <PhotosView uid={user.id} active={view === 'photos'} say={say} onChanged={profile.refresh} />
+          <PhotosView uid={user.id} active={view === 'photos'} say={say} onChanged={profile.refresh} friends={friends.friends} onOpenFriends={() => go('friends')} />
           {view === 'friends' && <FriendsView friends={friends} say={say} />}
           {view === 'settings' && <SettingsView />}
           {view === 'account' && <AccountView user={user} tier={profile.tier} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
