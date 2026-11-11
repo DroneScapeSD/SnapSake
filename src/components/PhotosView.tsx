@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
 import { compressImage } from '@/lib/compress';
+import { saveBlob, toPngBlob } from '@/lib/download';
 import type { Friendship } from '@/lib/friends';
 import { LIMIT, api, label, pillGhost, pillPrimary, size } from '@/lib/ui';
 
@@ -31,6 +32,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
   const [open, setOpen] = useState<Photo | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
   const [sharing, setSharing] = useState<string | null>(null); // user id of the checkbox being saved
+  const [downloading, setDownloading] = useState(false);
   const [pending, setPending] = useState<Record<string, boolean>>({}); // optimistic checkbox state while saving
   const [busy, setBusy] = useState(0);
   const [bad, setBad] = useState<Record<string, boolean>>({});
@@ -90,6 +92,26 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
     await refreshInfo();
     setPending({}); setSharing(null);
   }
+  // Saves the photo as a PNG. Works for your own photos and ones shared with you.
+  async function download() {
+    if (!open || downloading) return;
+    setDownloading(true);
+    try {
+      const get = async (url?: string) => { const r = await fetch(url ?? ''); if (!r.ok) throw new Error('fetch failed'); return r.blob(); };
+      let blob: Blob;
+      try { blob = await get(urls[open.id]); }
+      catch { // the 5-minute link may have expired while the viewer was open, so get a fresh one and retry once
+        const r = await api('/api/photo-urls', { ids: [open.id] });
+        const fresh: Record<string, string> = r.ok ? await r.json() : {};
+        if (!fresh[open.id]) throw new Error('no link');
+        setUrls((u) => ({ ...u, ...fresh }));
+        blob = await get(fresh[open.id]);
+      }
+      saveBlob(await toPngBlob(blob), open.filename.replace(/\.[^.]+$/, '') + '.png');
+    } catch { say("Couldn't download this photo"); }
+    finally { setDownloading(false); }
+  }
+
   async function del() {
     if (!open) return;
     if (prefs.confirmDelete && !confirm('Delete this photo for everyone?')) return;
@@ -172,6 +194,9 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                 <div><p className="break-all font-medium">{open.filename}</p><p className="mt-0.5 text-xs text-fg/45">{size(open.size_bytes)}</p></div>
                 <button aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fg/15 text-fg/60 transition hover:bg-fg/10 hover:text-fg" onClick={() => setOpen(null)}>✕</button>
               </div>
+              <button className={`${pillPrimary} w-full !py-2.5`} onClick={download} disabled={downloading}>
+                {downloading ? 'Preparing...' : 'Download PNG'}
+              </button>
               {open.owner_id === uid ? (
                 <>
                   <div>
