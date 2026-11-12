@@ -136,7 +136,7 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
                   : rank(t) < rank(current) ? <p className="mt-5 text-center text-xs text-fg/40">Included in your plan</p>
                   : t === 'free' ? null : (
                     <div className="mt-5" role="progressbar" aria-label={`Invites toward ${TIERS[t].name}`} aria-valuemin={0} aria-valuemax={need} aria-valuenow={done}>
-                      <div className="flex justify-between text-xs text-fg/50"><span>Unlock with invites</span><span>{invited === null ? '...' : `${done} / ${need}`}</span></div>
+                      <div className="flex justify-between text-xs text-fg/50"><span>Unlock with invites</span><span>{invited === null ? '...' : `${done}/${need} invites`}</span></div>
                       <div className="mt-1.5 h-[3px] rounded-full bg-fg/10"><div className="h-full rounded-full bg-accent transition-all" style={{ width: `${(done / need) * 100}%` }} /></div>
                     </div>
                   )}

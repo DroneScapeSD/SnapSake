@@ -20,7 +20,7 @@ export type TierSpec = {
 };
 
 export const TIERS: Record<Tier, TierSpec> = {
-  free: { name: 'Free', quota: 500 * MB, shares: 2, maxFile: 15 * MB, resolution: '1080p', fit: { long: 1920, short: 1080 } },
+  free: { name: 'Free', quota: GB, shares: 2, maxFile: 15 * MB, resolution: '1080p', fit: { long: 1920, short: 1080 } },
   plus: { name: 'Plus', quota: 10 * GB, shares: 6, maxFile: 15 * MB, resolution: '1440p', fit: { long: 2560, short: 1440 } },
   pro: { name: 'Pro', quota: 50 * GB, shares: 10, maxFile: 15 * MB, resolution: '4K', fit: { long: 3840, short: 2160 } },
   admin: { name: 'Admin', quota: TB, shares: 10, maxFile: 100 * MB, resolution: 'Original quality', fit: null },
@@ -30,7 +30,7 @@ export const TIERS: Record<Tier, TierSpec> = {
 // invite link) AND uploaded a photo. Keep in sync with redeem_invites() in supabase/invites.sql.
 export const INVITES = { plus: 5, pro: 15 } as const;
 
-export const MAX_CUSTOM_QUOTA = 10 * TB; // the most the admin dashboard will accept as a custom limit
+export const MAX_CUSTOM_QUOTA = 100 * GB; // the most the admin dashboard will accept as a custom limit
 
 export const tierOf = (t?: string | null): Tier => ((TIER_KEYS as readonly string[]).includes(t ?? '') ? (t as Tier) : 'free');
 // A custom limit set from the admin dashboard (quota_bytes) wins over the plan's default.

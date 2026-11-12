@@ -4,6 +4,7 @@ import { serif } from '@/lib/fonts';
 import { MAX_CUSTOM_QUOTA, TIERS, TIER_KEYS, quotaFor, tierOf, type Tier } from '@/lib/limits';
 import { api, field, label, limitLabel, panel, pillGhost, pillPrimary, size } from '@/lib/ui';
 import { handle } from '@/lib/username';
+import { SITE } from '@/lib/site';
 
 type Row = {
   id: string; username: string; email: string; tier: string; created_at: string;
@@ -65,6 +66,8 @@ export function AdminView({ say }: { say: (m: string) => void }) {
   const [sort, setSort] = useState<Sort>('newest');
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<Row | null>(null); // the account the "are you sure?" box is about
+  const [deleting, setDeleting] = useState(false);
 
   const lock = useCallback((msg?: string) => { setToken(null); setRows(null); setPw(''); if (msg) say(msg); }, [say]);
 
@@ -101,6 +104,17 @@ export function AdminView({ say }: { say: (m: string) => void }) {
     setRows((rs) => rs && rs.map((x) => (x.id === row.id ? { ...x, tier: j.user.tier, quota_bytes: j.user.quota_bytes } : x)));
     setEditing(null);
     say(okMsg);
+  }
+
+  async function deleteUser(row: Row) {
+    if (!token || deleting) return;
+    setDeleting(true);
+    const j = await call('/api/admin/delete-user', token, { userId: row.id });
+    setDeleting(false);
+    if (!j) return; // the error was already shown
+    setRows((rs) => rs && rs.filter((x) => x.id !== row.id));
+    setConfirmDel(null);
+    say(`${handle(row.username)} was deleted`);
   }
 
   const shown = useMemo(() => {
@@ -168,12 +182,12 @@ export function AdminView({ say }: { say: (m: string) => void }) {
         <table className="w-full min-w-[920px] text-left text-sm">
           <thead>
             <tr className={`${label} border-b border-fg/10 text-fg/50`}>
-              {['Username', 'Email', 'Plan', 'Joined', 'Usage', 'Friends'].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}
+              {['Username', 'Email', 'Plan', 'Joined', 'Usage', 'Friends', ''].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-fg/10">
-            {rows === null && <tr><td colSpan={6} className="px-4 py-8 text-center text-fg/45">Loading...</td></tr>}
-            {rows && shown.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-fg/45">No users match.</td></tr>}
+            {rows === null && <tr><td colSpan={7} className="px-4 py-8 text-center text-fg/45">Loading...</td></tr>}
+            {rows && shown.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-fg/45">No users match.</td></tr>}
             {shown.map((r) => {
               const quota = quotaFor(r.tier, r.quota_bytes);
               const pct = quota > 0 ? Math.min(100, (r.used_bytes / quota) * 100) : 100;
@@ -202,12 +216,31 @@ export function AdminView({ say }: { say: (m: string) => void }) {
                     )}
                   </td>
                   <td className="px-4 py-3">{r.friend_count}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.username !== SITE.adminUsername && (
+                      <button className="rounded-full border border-red-500/30 px-3 py-1.5 text-xs text-red-500 transition hover:bg-red-500/10 disabled:opacity-40" disabled={busy} onClick={() => setConfirmDel(r)}>Delete account</button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => !deleting && setConfirmDel(null)}>
+          <div role="alertdialog" aria-modal="true" aria-labelledby="del-title" className="w-full max-w-md rounded-3xl border border-fg/10 bg-bg p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 id="del-title" className="text-xl font-semibold tracking-tight">Delete {handle(confirmDel.username)}?</h3>
+            <p className="mt-3 text-sm text-fg/65">
+              Are you sure? This permanently deletes the account for <span className="font-medium text-fg">{confirmDel.email}</span> along with their photos ({size(confirmDel.used_bytes)}), albums, shares and friendships. This cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
+              <button className="rounded-full bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-600/85 active:scale-[0.98] disabled:opacity-50 sm:flex-1" disabled={deleting} onClick={() => deleteUser(confirmDel)}>{deleting ? 'Deleting...' : 'Yes, delete account'}</button>
+              <button className={`${pillGhost} !px-5 !py-2.5 sm:flex-1`} disabled={deleting} onClick={() => setConfirmDel(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <p className="text-xs text-fg/45">Changing someone&apos;s plan also clears any custom limit, so they start from that plan&apos;s default. Set a custom limit afterwards if you want one.</p>
     </div>
   );
