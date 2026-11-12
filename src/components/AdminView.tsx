@@ -9,6 +9,7 @@ import { SITE } from '@/lib/site';
 type Row = {
   id: string; username: string; email: string; tier: string; created_at: string;
   used_bytes: number; quota_bytes: number | null; friend_count: number;
+  email_verified?: boolean; // missing until supabase/tiers.sql is re-run
 };
 
 const UNITS = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 } as const;
@@ -179,15 +180,15 @@ export function AdminView({ say }: { say: (m: string) => void }) {
       </div>
 
       <div className={`${panel} overflow-x-auto`}>
-        <table className="w-full min-w-[920px] text-left text-sm">
+        <table className="w-full min-w-[1000px] text-left text-sm">
           <thead>
             <tr className={`${label} border-b border-fg/10 text-fg/50`}>
-              {['Username', 'Email', 'Plan', 'Joined', 'Usage', 'Friends', ''].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}
+              {['Username', 'Email', 'Verified', 'Plan', 'Joined', 'Usage', 'Friends', ''].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-fg/10">
-            {rows === null && <tr><td colSpan={7} className="px-4 py-8 text-center text-fg/45">Loading...</td></tr>}
-            {rows && shown.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-fg/45">No users match.</td></tr>}
+            {rows === null && <tr><td colSpan={8} className="px-4 py-8 text-center text-fg/45">Loading...</td></tr>}
+            {rows && shown.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-fg/45">No users match.</td></tr>}
             {shown.map((r) => {
               const quota = quotaFor(r.tier, r.quota_bytes);
               const pct = quota > 0 ? Math.min(100, (r.used_bytes / quota) * 100) : 100;
@@ -196,6 +197,11 @@ export function AdminView({ say }: { say: (m: string) => void }) {
                 <tr key={r.id} className={`align-top ${busy ? 'opacity-60' : ''}`}>
                   <td className="px-4 py-3 font-medium">{handle(r.username)}</td>
                   <td className="max-w-[16rem] truncate px-4 py-3 text-fg/70" title={r.email}>{r.email}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    {r.email_verified === undefined ? <span className="text-fg/35">-</span>
+                      : r.email_verified ? <span className="rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">Verified</span>
+                      : <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">Not verified</span>}
+                  </td>
                   <td className="px-4 py-3">
                     <select className={small} aria-label={`Plan for ${r.username}`} value={tierOf(r.tier)} disabled={busy}
                       onChange={(e) => update(r, { tier: e.target.value as Tier }, `${handle(r.username)} is now on ${TIERS[e.target.value as Tier].name}`)}>

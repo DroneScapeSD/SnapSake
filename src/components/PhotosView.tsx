@@ -300,11 +300,11 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
 
       {open && active && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setOpen(null)}>
-          <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-fg/10 bg-surface text-fg md:flex-row" onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-1 items-center justify-center bg-black">
-              {urls[open.id] && (/* eslint-disable-next-line @next/next/no-img-element */ <img src={urls[open.id]} alt="" className="max-h-[70vh] w-full object-contain" />)}
+          <div className="flex h-full max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-fg/10 bg-surface text-fg md:h-auto md:flex-row" onClick={(e) => e.stopPropagation()}>
+            <div className="flex min-h-[25%] flex-1 items-center justify-center bg-black md:min-h-0">
+              {urls[open.id] && (/* eslint-disable-next-line @next/next/no-img-element */ <img src={urls[open.id]} alt="" className="h-full max-h-full w-full object-contain md:h-auto md:max-h-[70vh]" />)}
             </div>
-            <aside className="w-full space-y-6 overflow-y-auto p-6 md:w-80">
+            <aside className="max-h-[60%] w-full shrink-0 space-y-4 overflow-y-auto p-5 md:max-h-none md:w-80 md:space-y-6 md:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div><p className="break-all font-medium">{open.filename}</p><p className="mt-0.5 text-xs text-fg/45">{size(open.size_bytes)}</p></div>
                 <button aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fg/15 text-fg/60 transition hover:bg-fg/10 hover:text-fg" onClick={() => setOpen(null)}>✕</button>

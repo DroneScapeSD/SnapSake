@@ -99,6 +99,7 @@ create or replace function admin_user_stats() returns jsonb language sql stable 
     'id', p.id,
     'username', p.username,
     'email', p.email,
+    'email_verified', u.email_confirmed_at is not null,
     'tier', p.tier,
     'created_at', u.created_at,
     'used_bytes', p.used_bytes,
