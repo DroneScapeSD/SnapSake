@@ -21,9 +21,9 @@ export type TierSpec = {
 
 export const TIERS: Record<Tier, TierSpec> = {
   free: { name: 'Free', quota: 500 * MB, shares: 2, maxFile: 15 * MB, resolution: '1080p', fit: { long: 1920, short: 1080 } },
-  plus: { name: 'Plus', quota: 10 * GB, shares: 6, maxFile: 15 * MB, resolution: '1440p', fit: { long: 2560, short: 1440 } },
-  pro: { name: 'Pro', quota: 50 * GB, shares: 15, maxFile: 15 * MB, resolution: '4K', fit: { long: 3840, short: 2160 } },
-  admin: { name: 'Admin', quota: TB, shares: 50, maxFile: 100 * MB, resolution: 'Original quality', fit: null },
+  plus: { name: 'Plus', quota: 10 * GB, shares: 5, maxFile: 15 * MB, resolution: '1440p', fit: { long: 2560, short: 1440 } },
+  pro: { name: 'Pro', quota: 50 * GB, shares: 10, maxFile: 15 * MB, resolution: '4K', fit: { long: 3840, short: 2160 } },
+  admin: { name: 'Admin', quota: 100 * GB, shares: 10, maxFile: 100 * MB, resolution: 'Original quality', fit: null },
 };
 
 export const MAX_CUSTOM_QUOTA = 10 * TB; // the most the admin dashboard will accept as a custom limit
