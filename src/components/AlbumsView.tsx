@@ -114,7 +114,7 @@ function ShareList({ album, friends, albums, say, onOpenFriends }: {
               <li key={r.id}>
                 <label className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-fg/[0.06] ${on ? 'bg-fg/[0.05]' : ''} ${busyId ? 'opacity-70' : ''}`}>
                   <input type="checkbox" className="h-4 w-4 shrink-0 accent-accent" checked={on} disabled={!!busyId} onChange={(e) => toggle(r.id, e.target.checked)} />
-                  <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.username[0]}</span>
+                  <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-fg/10 text-xs font-semibold uppercase">{r.username?.[0]}</span>
                   <span className="min-w-0 flex-1 truncate text-sm">{handle(r.username)}</span>
                   {r.viaLink && <span className="shrink-0 text-xs text-fg/40">joined by link</span>}
                 </label>
@@ -227,7 +227,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
             <button className={`${label} text-fg/50 transition hover:text-fg`} onClick={() => albums.setOpenId(null)}>← All albums</button>
             <h3 className="mt-3 break-words text-3xl font-semibold tracking-tight">{open.name}</h3>
             <p className="mt-1 text-sm text-fg/50">
-              {plural(open.photo_ids.length, 'photo')} · {open.is_owner ? 'Created by you' : `Shared by ${handle(open.owner_username)}`}
+              {plural(open.photo_ids.length, 'photo')} · {open.is_owner ? 'Created by you' : (open.owner_username ? `Shared by ${handle(open.owner_username)}` : 'Shared with you')}
             </p>
           </div>
           {open.is_owner ? (
@@ -358,7 +358,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
                   <p className="truncate text-sm font-medium text-white">{a.name}</p>
                   <p className="truncate text-xs text-white/70">
                     {plural(a.photo_ids.length, 'photo')}
-                    {a.is_owner ? (a.member_count > 0 ? ` · ${a.member_count} joined` : '') : ` · from ${handle(a.owner_username)}`}
+                    {a.is_owner ? (a.member_count > 0 ? ` · ${a.member_count} joined` : '') : (a.owner_username ? ` · from ${handle(a.owner_username)}` : ' · shared with you')}
                   </p>
                 </div>
               </button>

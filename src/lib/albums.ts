@@ -40,7 +40,16 @@ export function useAlbums(uid: string | null) {
 
   const refresh = useCallback(
     () => supabase.rpc('albums_overview').then(({ data, error }) => {
-      if (Array.isArray(data)) { setItems(data as Album[]); setSetupError(false); }
+      if (Array.isArray(data)) {
+        // If the database still has the pre-username albums_overview(), usernames come back missing.
+        // Never show emails; blank usernames make the UI fall back to neutral wording.
+        setItems((data as Album[]).map((a) => ({
+          ...a,
+          owner_username: a.owner_username ?? '',
+          members: (a.members ?? []).map((m) => ({ ...m, username: m.username ?? '' })),
+        })));
+        setSetupError(false);
+      }
       else if (error) setSetupError(true);
       setLoaded(true);
     }),
