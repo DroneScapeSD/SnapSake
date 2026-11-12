@@ -23,7 +23,7 @@ export const TIERS: Record<Tier, TierSpec> = {
   free: { name: 'Free', quota: GB, shares: 2, maxFile: 15 * MB, resolution: '1080p', fit: { long: 1920, short: 1080 } },
   plus: { name: 'Plus', quota: 10 * GB, shares: 6, maxFile: 15 * MB, resolution: '1440p', fit: { long: 2560, short: 1440 } },
   pro: { name: 'Pro', quota: 50 * GB, shares: 10, maxFile: 15 * MB, resolution: '4K', fit: { long: 3840, short: 2160 } },
-  admin: { name: 'Admin', quota: TB, shares: 10, maxFile: 100 * MB, resolution: 'Original quality', fit: null },
+  admin: { name: 'Admin', quota: 100 * GB, shares: 10, maxFile: 100 * MB, resolution: 'Original quality', fit: null },
 };
 
 // Free upgrades: how many invited friends it takes. A friend counts once they have created an account (via your
