@@ -1,26 +1,28 @@
 'use client';
-import { APP, QUOTA, label, size } from '@/lib/ui';
+import { APP, label, limitLabel, size } from '@/lib/ui';
 import { serif } from '@/lib/fonts';
 import { handle } from '@/lib/username';
 import { Icon, type IconName } from './icons';
 
-export type View = 'photos' | 'friends' | 'settings' | 'account';
-export const VIEWS: View[] = ['photos', 'friends', 'settings', 'account'];
-export const VIEW_TITLES: Record<View, string> = { photos: 'Photos', friends: 'Friends', settings: 'Settings', account: 'Account' };
+export type View = 'photos' | 'friends' | 'settings' | 'account' | 'admin';
+export const VIEWS: View[] = ['photos', 'friends', 'settings', 'account', 'admin'];
+export const VIEW_TITLES: Record<View, string> = { photos: 'Photos', friends: 'Friends', settings: 'Settings', account: 'Account', admin: 'Admin' };
 
-const ICONS: Record<View, IconName> = { photos: 'photos', friends: 'friends', settings: 'settings', account: 'account' };
+const ICONS: Record<View, IconName> = { photos: 'photos', friends: 'friends', settings: 'settings', account: 'account', admin: 'admin' };
 
-export function Sidebar({ view, onNavigate, open, onClose, badges, used, username, onLogout }: {
+export function Sidebar({ view, onNavigate, open, onClose, badges, used, quota, isAdmin, username, onLogout }: {
   view: View;
   onNavigate: (v: View) => void;
   open: boolean; // mobile drawer state
   onClose: () => void;
   badges: Partial<Record<View, number>>;
   used: number;
+  quota: number; // this person's storage limit in bytes
+  isAdmin: boolean; // shows the Admin tab (cosmetic: the server decides who can really use it)
   username: string;
   onLogout: () => void;
 }) {
-  const pct = Math.min(100, (used / QUOTA) * 100);
+  const pct = quota > 0 ? Math.min(100, (used / quota) * 100) : 100;
   return (
     <>
       {open && <div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden" onClick={onClose} aria-hidden />}
@@ -36,7 +38,7 @@ export function Sidebar({ view, onNavigate, open, onClose, badges, used, usernam
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
-          {VIEWS.map((v) => {
+          {VIEWS.filter((v) => v !== 'admin' || isAdmin).map((v) => {
             const active = v === view;
             const n = badges[v];
             return (
@@ -57,7 +59,7 @@ export function Sidebar({ view, onNavigate, open, onClose, badges, used, usernam
 
         <div className="space-y-4 border-t border-fg/10 p-5">
           <div>
-            <div className="flex justify-between text-[11px] text-fg/50"><span>Storage</span><span>{size(used)} / {size(QUOTA)}</span></div>
+            <div className="flex justify-between text-[11px] text-fg/50"><span>Storage</span><span>{size(used)} / {limitLabel(quota)}</span></div>
             <div className="mt-1.5 h-[3px] rounded-full bg-fg/10"><div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} /></div>
           </div>
           <div className="flex items-center justify-between gap-3">

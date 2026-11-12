@@ -3,10 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { r2, BUCKET } from '@/lib/r2';
-import { MAX_FILE, QUOTA } from '@/lib/limits';
+import { limitLabel } from '@/lib/limits';
 import { adjustUsed } from '@/lib/usage';
+import { getPlan } from '@/lib/plan';
 
-const FULL = 'Storage full. Your 1 GB limit is reached, so delete some photos to upload more.';
+const full = (quota: number) => `Storage full. Your ${limitLabel(quota)} limit is reached, so delete some photos to upload more.`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
@@ -15,10 +16,14 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await admin.auth.getUser(token);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const plan = await getPlan(admin, user.id);
+  if (!plan) return NextResponse.json({ error: 'Profile not found' }, { status: 400 });
+  const FULL = full(plan.quota);
+
   // albumId present = upload straight into that album (the photo is stored once and kept out of My Uploads).
   const { filename, size, type, hash, albumId } = await req.json();
   if (typeof type !== 'string' || !type.startsWith('image/')) return NextResponse.json({ error: 'Images only' }, { status: 400 });
-  if (!(size > 0) || size > MAX_FILE) return NextResponse.json({ error: 'Max 15 MB per photo' }, { status: 400 });
+  if (!(size > 0) || size > plan.maxFile) return NextResponse.json({ error: `Max ${limitLabel(plan.maxFile)} per photo on your plan` }, { status: 400 });
   if (typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) return NextResponse.json({ error: 'Bad request' }, { status: 400 });
   if (albumId !== undefined && albumId !== null && (typeof albumId !== 'string' || !UUID.test(albumId))) return NextResponse.json({ error: 'Bad request' }, { status: 400 });
 
@@ -36,12 +41,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Block the upload outright once the user is at (or over) their limit, or if this photo wouldn't fit.
-  const { data: prof } = await admin.from('profiles').select('used_bytes').eq('id', user.id).single();
-  if (!prof) return NextResponse.json({ error: 'Profile not found' }, { status: 400 });
-  if (prof.used_bytes >= QUOTA || prof.used_bytes + size > QUOTA) return NextResponse.json({ error: FULL, code: 'quota' }, { status: 403 });
+  if (plan.used >= plan.quota || plan.used + size > plan.quota) return NextResponse.json({ error: FULL, code: 'quota' }, { status: 403 });
 
   // Reserve the space first, then undo the reservation if anything below fails.
-  const reserved = await adjustUsed(admin, user.id, size, QUOTA);
+  const reserved = await adjustUsed(admin, user.id, size, plan.quota);
   if (reserved === 'full') return NextResponse.json({ error: FULL, code: 'quota' }, { status: 403 });
   if (reserved === 'error') return NextResponse.json({ error: 'Server busy, please try again' }, { status: 503 });
 

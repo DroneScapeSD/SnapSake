@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { serif } from '@/lib/fonts';
-import { LIMIT, MAX_FILE, QUOTA, field, label, panel, pillGhost, pillPrimary, size } from '@/lib/ui';
+import { TIERS, TIER_KEYS, rank, tierOf, UPGRADABLE, type Tier } from '@/lib/limits';
+import { api, field, label, limitLabel, panel, pillGhost, pillPrimary, size } from '@/lib/ui';
 import { handle } from '@/lib/username';
 
 function accountAge(iso: string) {
@@ -21,10 +22,12 @@ function accountAge(iso: string) {
   return days < 1 ? 'Joined today' : plural(days, 'day');
 }
 
-// Limits shown per plan. Only 'free' is enforced by the app today (QUOTA / LIMIT / MAX_FILE).
-const PLANS: Record<string, { name: string; perks: string[] }> = {
-  free: { name: 'Free', perks: [`${size(QUOTA)} of storage`, `${LIMIT} recipients per photo`, `${size(MAX_FILE)} max per photo`] },
-};
+// What each plan includes, as shown on the cards. The numbers come from TIERS in lib/limits.ts.
+const perks = (t: Tier, storage?: number) => [
+  `${limitLabel(storage ?? TIERS[t].quota)} of storage`,
+  `${TIERS[t].resolution} photo quality`,
+  `Share each photo or album with up to ${TIERS[t].shares} people`,
+];
 
 function Stat({ title, value, sub }: { title: string; value: string; sub?: string }) {
   return (
@@ -45,18 +48,29 @@ function Info({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export function AccountView({ user, username, tier, used, friendCount, say, onLogout }: {
-  user: User; username: string; tier: string; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void;
+export function AccountView({ user, username, tier, quota, requested, onRequested, used, friendCount, say, onLogout }: {
+  user: User; username: string; tier: string; quota: number; requested: string | null; onRequested: () => void; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void;
 }) {
   const [photoCount, setPhotoCount] = useState<number | null>(null);
   const [pw, setPw] = useState('');
   const [saving, setSaving] = useState(false);
-  const plan = PLANS[tier] ?? { name: tier.charAt(0).toUpperCase() + tier.slice(1), perks: [] };
+  const current = tierOf(tier);
+  const plan = TIERS[current];
+  const [asking, setAsking] = useState<string | null>(null);
   const joined = new Date(user.created_at);
 
   useEffect(() => {
     supabase.from('photos').select('id', { count: 'exact', head: true }).eq('owner_id', user.id).then(({ count }) => setPhotoCount(count ?? 0));
   }, [user.id, used]); // re-count when storage usage changes (upload / delete)
+
+  async function requestUpgrade(t: Tier) {
+    setAsking(t);
+    const r = await api('/api/request-upgrade', { tier: t });
+    const j = await r.json().catch(() => ({}));
+    setAsking(null);
+    if (!r.ok) return say(j.error ?? 'Could not send your request');
+    onRequested(); say(`Upgrade to ${TIERS[t].name} requested`);
+  }
 
   async function changePassword() {
     if (pw.length < 6) return say('Password must be at least 6 characters');
@@ -90,15 +104,40 @@ export function AccountView({ user, username, tier, used, friendCount, say, onLo
           </div>
           <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent-text">Current plan</span>
         </div>
-        {plan.perks.length > 0 && (
-          <ul className="mt-4 space-y-1.5 text-sm text-fg/65">
-            {plan.perks.map((p) => <li key={p}>{p}</li>)}
-          </ul>
-        )}
+        <ul className="mt-4 space-y-1.5 text-sm text-fg/65">
+          {perks(current, quota).map((p) => <li key={p}>{p}</li>)}
+        </ul>
         <div className="mt-6">
-          <div className="flex justify-between text-xs text-fg/50"><span>Storage used</span><span>{size(used)} of {size(QUOTA)}</span></div>
-          <div className="mt-1.5 h-[3px] rounded-full bg-fg/10"><div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (used / QUOTA) * 100)}%` }} /></div>
+          <div className="flex justify-between text-xs text-fg/50"><span>Storage used</span><span>{size(used)} of {limitLabel(quota)}</span></div>
+          <div className="mt-1.5 h-[3px] rounded-full bg-fg/10"><div className="h-full rounded-full bg-accent" style={{ width: `${quota > 0 ? Math.min(100, (used / quota) * 100) : 100}%` }} /></div>
         </div>
+      </section>
+
+      <section>
+        <h3 className={`${label} mb-3 text-fg/50`}>Plans</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {TIER_KEYS.filter((t) => t !== 'admin').map((t) => {
+            const isCurrent = t === current, higher = rank(t) > rank(current), asked = requested === t;
+            return (
+              <div key={t} className={`${panel} flex flex-col p-5 ${isCurrent ? 'ring-1 ring-accent/60' : ''}`}>
+                <p className={`${serif.className} text-3xl italic`}>{TIERS[t].name}</p>
+                <ul className="mt-3 flex-1 space-y-1.5 text-sm text-fg/65">
+                  {perks(t).map((p) => <li key={p}>{p}</li>)}
+                </ul>
+                {isCurrent ? (
+                  <p className="mt-5 text-center text-xs font-medium text-accent-text">Your current plan</p>
+                ) : higher && UPGRADABLE.includes(t) ? (
+                  <button className={`${pillPrimary} mt-5 w-full !py-2.5`} disabled={asked || asking !== null} onClick={() => requestUpgrade(t)}>
+                    {asked ? 'Upgrade requested' : asking === t ? 'Sending...' : `Upgrade to ${TIERS[t].name}`}
+                  </button>
+                ) : <p className="mt-5 text-center text-xs text-fg/40">Included in your plan</p>}
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-fg/45">
+          {requested ? `You asked for ${TIERS[tierOf(requested)].name}. We'll activate it on your account soon.` : 'Choose Upgrade and we will activate the plan on your account.'}
+        </p>
       </section>
 
       <section>

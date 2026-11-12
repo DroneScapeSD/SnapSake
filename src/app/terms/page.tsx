@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Bullets, LegalPage, Section } from '@/components/LegalPage';
 import { SITE } from '@/lib/site';
+import { TIERS, limitLabel } from '@/lib/limits';
 
 export const metadata: Metadata = {
   title: `Terms & Conditions — ${SITE.name}`,
@@ -63,9 +64,9 @@ export default function Terms() {
             'Sharing adds a photo to a friend’s library. It is access, not a transfer — you keep the original.',
             'A recipient can download, copy or screenshot a photo while it is shared with them, and we cannot undo that.',
             'Shared photos count against your storage, not the recipient’s.',
-            'The free plan allows a photo to be shared with at most 3 different people over its lifetime. Removing someone and adding them back does not free a slot.',
+            `Each plan limits how many different people a photo can be shared with over its lifetime (Free ${TIERS.free.shares}, Plus ${TIERS.plus.shares}, Pro ${TIERS.pro.shares}). Removing someone and adding them back does not free a slot. Albums have a matching limit on how many people can be in them.`,
             'Limits are enforced by a fingerprint of the file, so deleting a photo and re-uploading the same image does not reset its sharing history.',
-            'Photos are capped at 15 MB each and 3 GB per account. Re-uploading an identical file is rejected.',
+            `Photos are compressed when you upload them (Free ${TIERS.free.resolution}, Plus ${TIERS.plus.resolution}, Pro ${TIERS.pro.resolution}) and capped at ${limitLabel(TIERS.free.maxFile)} each. Storage is ${limitLabel(TIERS.free.quota)} on Free, ${limitLabel(TIERS.plus.quota)} on Plus and ${limitLabel(TIERS.pro.quota)} on Pro. Re-uploading an identical file is rejected.`,
           ]}
         />
         <p>

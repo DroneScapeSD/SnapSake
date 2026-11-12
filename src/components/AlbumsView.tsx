@@ -79,8 +79,8 @@ function PhotoPicker({ title, confirmLabel, askName, photos, urls, onClose, onCo
 
 // Friends checklist: ticking a friend adds them to the album, unticking removes them.
 // People who joined through the link but aren't friends stay listed so they can still be removed.
-function ShareList({ album, friends, albums, say, onOpenFriends }: {
-  album: Album; friends: Friendship[]; albums: Albums; say: (m: string) => void; onOpenFriends: () => void;
+function ShareList({ album, friends, albums, say, onOpenFriends, shareLimit }: {
+  album: Album; friends: Friendship[]; albums: Albums; say: (m: string) => void; onOpenFriends: () => void; shareLimit: number;
 }) {
   const [pending, setPending] = useState<Record<string, boolean>>({}); // optimistic tick while saving
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -100,7 +100,10 @@ function ShareList({ album, friends, albums, say, onOpenFriends }: {
 
   return (
     <div>
-      <p className={`${label} text-fg/50`}>Share with friends</p>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className={`${label} text-fg/50`}>Share with friends</p>
+        <p className="text-xs text-fg/45">{album.members.length} of {shareLimit} people</p>
+      </div>
       {rows.length === 0 ? (
         <div className="mt-3 rounded-xl border border-dashed border-fg/15 p-4 text-center">
           <p className="text-sm text-fg/55">You don&apos;t have any friends yet.</p>
@@ -127,7 +130,7 @@ function ShareList({ album, friends, albums, say, onOpenFriends }: {
   );
 }
 
-export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFriends, onUpload, busy, full, reload }: {
+export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFriends, onUpload, busy, full, reload, shareLimit }: {
   uid: string;
   albums: Albums;
   photos: Photo[]; // every photo this user can see (own, shared with them, and in their albums)
@@ -138,6 +141,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
   onUpload: (albumId: string, files: FileList | File[] | null) => void; // upload straight into an album
   busy: number; // uploads in progress
   full: boolean; // storage limit reached
+  shareLimit: number; // how many people an album can be shared with on this plan
   reload: () => void; // re-fetch photos (after deleting or saving one)
 }) {
   const { prefs } = usePrefs();
@@ -254,7 +258,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
               </div>
               <p className="mt-2 text-xs text-fg/40">Anyone who opens this link and logs in (or creates an account) is added to this album automatically, and can view and download its photos.</p>
             </div>
-            <ShareList album={open} friends={friends} albums={albums} say={say} onOpenFriends={onOpenFriends} />
+            <ShareList album={open} friends={friends} albums={albums} say={say} onOpenFriends={onOpenFriends} shareLimit={shareLimit} />
             <div className="flex flex-wrap gap-2 border-t border-fg/10 pt-4">
               <button className={smallGhost} onClick={() => reset(open)}>Reset link</button>
               <button className={smallDanger} onClick={() => del(open)}>Delete album</button>

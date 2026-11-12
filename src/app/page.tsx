@@ -15,6 +15,8 @@ import { PhotosView, type PhotoTab } from '@/components/PhotosView';
 import { FriendsView } from '@/components/FriendsView';
 import { SettingsView } from '@/components/SettingsView';
 import { AccountView } from '@/components/AccountView';
+import { AdminView } from '@/components/AdminView';
+import { SITE } from '@/lib/site';
 import { Footer } from '@/components/Footer';
 
 const initialView = (): View => {
@@ -46,6 +48,8 @@ function Home() {
   const friends = useFriends(uid);
   const albums = useAlbums(uid);
   const profile = useProfile(uid);
+  const isAdmin = profile.username === SITE.adminUsername; // only shows the tab; every admin request is re-checked on the server
+  const shownView: View = view === 'admin' && !isAdmin ? 'photos' : view; // anyone else who lands on #admin just sees Photos
 
   const say = (m: string) => { if (!m) return; setToast(m); setTimeout(() => setToast(''), 3500); };
 
@@ -173,9 +177,9 @@ function Home() {
   return (
     <div className={`${sans.className} min-h-screen bg-bg text-fg`}>
       <Sidebar
-        view={view} onNavigate={go} open={navOpen} onClose={() => setNavOpen(false)}
+        view={shownView} onNavigate={go} open={navOpen} onClose={() => setNavOpen(false)}
         badges={{ friends: friends.incoming.length }}
-        used={profile.used} username={profile.username} onLogout={logout}
+        used={profile.used} quota={profile.quota} isAdmin={isAdmin} username={profile.username} onLogout={logout}
       />
 
       <div className="flex min-h-screen flex-col md:pl-64">
@@ -184,16 +188,17 @@ function Home() {
           <button aria-label="Open menu" className="flex h-9 w-9 items-center justify-center rounded-full text-fg/70 transition hover:bg-fg/10 hover:text-fg" onClick={() => setNavOpen(true)}>
             <Icon name="menu" />
           </button>
-          <span className="text-sm font-semibold uppercase tracking-[0.25em]">{VIEW_TITLES[view]}</span>
-          {friends.incoming.length > 0 && view !== 'friends' && <span className="ml-auto h-2 w-2 rounded-full bg-accent" aria-label="Pending friend requests" />}
+          <span className="text-sm font-semibold uppercase tracking-[0.25em]">{VIEW_TITLES[shownView]}</span>
+          {friends.incoming.length > 0 && shownView !== 'friends' && <span className="ml-auto h-2 w-2 rounded-full bg-accent" aria-label="Pending friend requests" />}
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10">
-          <PhotosView uid={user.id} active={view === 'photos'} say={say} onChanged={profile.refresh} friends={friends.friends} onOpenFriends={() => go('friends')}
-            tab={photoTab} onTab={setPhotoTab} albums={albums} used={profile.used} />
-          {view === 'friends' && <FriendsView friends={friends} say={say} />}
-          {view === 'settings' && <SettingsView />}
-          {view === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
+          <PhotosView uid={user.id} active={shownView === 'photos'} say={say} onChanged={profile.refresh} friends={friends.friends} onOpenFriends={() => go('friends')}
+            tab={photoTab} onTab={setPhotoTab} albums={albums} used={profile.used} quota={profile.quota} tier={profile.tier} />
+          {shownView === 'friends' && <FriendsView friends={friends} say={say} />}
+          {shownView === 'settings' && <SettingsView />}
+          {shownView === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} quota={profile.quota} requested={profile.requested} onRequested={profile.refresh} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
+          {shownView === 'admin' && <AdminView say={say} />}
         </main>
         <Footer />
       </div>

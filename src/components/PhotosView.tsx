@@ -9,10 +9,11 @@ import type { Friendship } from '@/lib/friends';
 import { handle } from '@/lib/username';
 import type { Albums } from '@/lib/albums';
 import { AlbumsView } from '@/components/AlbumsView';
-import { LIMIT, QUOTA, api, field, label, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
+import { TIERS, tierOf } from '@/lib/limits';
+import { api, field, label, limitLabel, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
 
 export type PhotoTab = 'mine' | 'shared' | 'albums';
-type Info = { recipients: { id: string; username: string }[]; used: number };
+type Info = { recipients: { id: string; username: string }[]; used: number; limit?: number };
 
 async function sha256(f: File) {
   const buf = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
@@ -27,12 +28,14 @@ async function fetchPhotos(): Promise<Photo[]> {
   return (basic.data ?? []).map((p) => ({ ...p, in_library: true }));
 }
 
-export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends, tab, onTab, albums, used }: {
+export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends, tab, onTab, albums, used, quota, tier }: {
   uid: string;
   tab: PhotoTab; // which of My Uploads / Shared With Me / Albums is showing (owned by the page so a share link can open Albums)
   onTab: (t: PhotoTab) => void;
   albums: Albums;
   used: number; // bytes of storage used
+  quota: number; // this person's storage limit in bytes
+  tier: string; // plan: decides how photos are compressed and how many people a photo can be shared with
   friends: Friendship[]; // accepted friends, for the share checklist
   onOpenFriends: () => void;
   active: boolean; // false while another sidebar section is showing (this view stays mounted so uploads keep going)
@@ -82,8 +85,9 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
   const firstSig = useRef(albumSig);
   useEffect(() => { if (albumSig !== firstSig.current) { firstSig.current = albumSig; load(); } }, [albumSig, load]);
 
-  const full = used >= QUOTA;
-  const FULL_MSG = `Storage full (${size(QUOTA)}). Delete some photos to upload more.`;
+  const full = used >= quota;
+  const FULL_MSG = `Storage full (${limitLabel(quota)}). Delete some photos to upload more.`;
+  const planShares = TIERS[tierOf(tier)].shares;
 
   // Uploads the files one by one. With albumId they go straight into that album: stored once, and kept out of My Uploads.
   // Resolves to how many photos ended up stored (or added to the album).
@@ -96,7 +100,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
         // Hash the original so re-uploading the same photo is still caught as a duplicate.
         const hash = await sha256(original);
         let f: File;
-        try { f = await compressImage(original); } catch { say(`${original.name}: couldn't read this image`); continue; }
+        try { f = await compressImage(original, tier); } catch { say(`${original.name}: couldn't read this image`); continue; }
         const r = await api('/api/upload-url', { filename: f.name, size: f.size, type: f.type, hash, albumId });
         const j = await r.json();
         if (!r.ok) {
@@ -243,7 +247,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
 
         {tab === 'albums' ? (
           <AlbumsView uid={uid} albums={albums} photos={photos} urls={urls} say={say}
-            friends={friends} onOpenFriends={onOpenFriends} onUpload={uploadToAlbum} busy={busy} full={full} reload={load} />
+            friends={friends} onOpenFriends={onOpenFriends} onUpload={uploadToAlbum} busy={busy} full={full} reload={load} shareLimit={planShares} />
         ) : !loaded ? (
           <div className={grid}>{Array.from({ length: 8 }).map((_, i) => <div key={i} className="aspect-[4/5] animate-pulse rounded-3xl bg-fg/[0.06]" />)}</div>
         ) : shown.length === 0 ? (
@@ -310,9 +314,9 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                     <p className={`${label} text-fg/50`}>Share with friends</p>
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex gap-1">
-                        {Array.from({ length: LIMIT }).map((_, i) => <span key={i} className={`h-1.5 w-6 rounded-full ${info && i < info.used ? 'bg-accent' : 'bg-fg/15'}`} />)}
+                        {Array.from({ length: info?.limit ?? planShares }).map((_, i) => <span key={i} className={`h-1.5 w-6 rounded-full ${info && i < info.used ? 'bg-accent' : 'bg-fg/15'}`} />)}
                       </div>
-                      <p className="text-xs text-fg/45">{info ? `${info.used} of ${LIMIT} slots used (lifetime)` : ' '}</p>
+                      <p className="text-xs text-fg/45">{info ? `${info.used} of ${info.limit ?? planShares} slots used (lifetime)` : ' '}</p>
                     </div>
                     {(() => {
                       // Friends first; anyone it was shared with before who isn't (or is no longer) a friend stays listed so you can still remove them.

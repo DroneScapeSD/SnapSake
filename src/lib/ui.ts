@@ -2,9 +2,9 @@ import { supabase } from '@/lib/supabase';
 import { SITE } from '@/lib/site';
 
 export const APP = SITE.name; // change the name in lib/site.ts
-export { QUOTA, LIMIT, MAX_FILE } from '@/lib/limits'; // limits live in lib/limits.ts
+export { TIERS, tierOf, quotaFor, limitLabel } from '@/lib/limits'; // plan limits live in lib/limits.ts
 
-export const size = (b: number) => (b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB' : (b / 1024 ** 2).toFixed(1) + ' MB');
+export const size = (b: number) => (b >= 1024 ** 4 ? (b / 1024 ** 4).toFixed(2) + ' TB' : b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(2) + ' GB' : (b / 1024 ** 2).toFixed(1) + ' MB');
 export const token = async () => (await supabase.auth.getSession()).data.session?.access_token ?? '';
 export const api = async (path: string, body: object) =>
   fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${await token()}` }, body: JSON.stringify(body) });
