@@ -30,7 +30,7 @@ update profiles set tier = 'admin' where username = 'slater';
 
 -- 2. Share limits per plan. Keep in sync with TIERS in src/lib/limits.ts. ----------------------------------------------
 create or replace function tier_share_limit(p_uid uuid) returns int language sql stable security definer set search_path = public as $$
-  select case (select tier from profiles where id = p_uid) when 'plus' then 6 when 'pro' then 15 when 'admin' then 50 else 2 end;
+  select case (select tier from profiles where id = p_uid) when 'plus' then 6 when 'pro' then 10 when 'admin' then 10 else 2 end;
 $$;
 revoke execute on function tier_share_limit(uuid) from public, anon, authenticated;
 

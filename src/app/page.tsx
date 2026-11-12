@@ -6,6 +6,7 @@ import { PrefsProvider } from '@/lib/prefs';
 import { useFriends } from '@/lib/friends';
 import { captureAlbumInvite, clearPendingAlbum, getPendingAlbum, useAlbums } from '@/lib/albums';
 import { useProfile } from '@/lib/profile';
+import { captureReferral, clearReferral, getReferral } from '@/lib/referral';
 import { checkUsername, handle, normalizeUsername } from '@/lib/username';
 import { sans, serif } from '@/lib/fonts';
 import { APP, field, label, pillGhost, pillPrimary } from '@/lib/ui';
@@ -44,6 +45,7 @@ function Home() {
   const [navOpen, setNavOpen] = useState(false);
   const [photoTab, setPhotoTab] = useState<PhotoTab>('mine');
   const [invite, setInvite] = useState(false); // opened an album link while logged out
+  const [invitedBy, setInvitedBy] = useState(''); // opened a friend's ?ref= invite link while logged out
   const uid = user?.id ?? null;
   const friends = useFriends(uid);
   const albums = useAlbums(uid);
@@ -55,6 +57,9 @@ function Home() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
+      captureReferral(); // remembers a ?ref=<username> invite link
+      const ref = getReferral();
+      if (ref) { setInvitedBy(ref); setMode('signup'); }
       captureAlbumInvite(); // remembers a ?join=<token> album link until we know who is logged in
       setInvite(!!getPendingAlbum());
       setUser(data.session?.user ?? null); setReady(true);
@@ -62,6 +67,15 @@ function Home() {
     const { data: l } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null));
     return () => l.subscription.unsubscribe();
   }, []);
+
+  // Once logged in, tell the server who invited this person (counts toward the inviter's free upgrade).
+  useEffect(() => {
+    if (!uid) return;
+    const ref = getReferral();
+    if (!ref) return;
+    clearReferral();
+    supabase.rpc('claim_referral', { p_username: ref }).then(() => {});
+  }, [uid]);
 
   // Once logged in, use any pending album link: join the album and open it.
   useEffect(() => {
@@ -145,6 +159,7 @@ function Home() {
           <div className="rounded-3xl border border-fg/10 bg-fg/[0.03] p-8 backdrop-blur">
             <h2 className="text-2xl font-semibold tracking-tight">{signingUp ? 'Create your account' : 'Welcome'}</h2>
             <p className="mt-1 text-sm text-fg/50">{signingUp ? 'Pick a username, then add your email and a password.' : 'Log in with your username or email.'}</p>
+            {invitedBy && <p className="mt-4 rounded-xl bg-accent/15 px-4 py-3 text-sm text-accent-text">{handle(invitedBy)} invited you to {APP}. Create an account and upload a photo to help them unlock a free upgrade.</p>}
             {invite && <p className="mt-4 rounded-xl bg-accent/15 px-4 py-3 text-sm text-accent-text">Someone shared an album with you. Log in or create an account to open it.</p>}
             <form className="mt-6 space-y-3" onSubmit={(e) => { e.preventDefault(); if (!busy) (signingUp ? signup() : login()); }}>
               {signingUp ? (
@@ -175,14 +190,14 @@ function Home() {
   );
 
   return (
-    <div className={`${sans.className} min-h-screen bg-bg text-fg`}>
+    <div className={`${sans.className} min-h-screen max-w-full overflow-x-clip bg-bg text-fg`}>
       <Sidebar
         view={shownView} onNavigate={go} open={navOpen} onClose={() => setNavOpen(false)}
         badges={{ friends: friends.incoming.length }}
         used={profile.used} quota={profile.quota} isAdmin={isAdmin} username={profile.username} onLogout={logout}
       />
 
-      <div className="flex min-h-screen flex-col md:pl-64">
+      <div className="flex min-h-screen min-w-0 flex-col md:pl-64">
         {/* Mobile top bar */}
         <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-fg/10 bg-bg/80 px-4 py-3 backdrop-blur-xl md:hidden">
           <button aria-label="Open menu" className="flex h-9 w-9 items-center justify-center rounded-full text-fg/70 transition hover:bg-fg/10 hover:text-fg" onClick={() => setNavOpen(true)}>
@@ -192,12 +207,12 @@ function Home() {
           {friends.incoming.length > 0 && shownView !== 'friends' && <span className="ml-auto h-2 w-2 rounded-full bg-accent" aria-label="Pending friend requests" />}
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10">
+        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-5 py-10">
           <PhotosView uid={user.id} active={shownView === 'photos'} say={say} onChanged={profile.refresh} friends={friends.friends} onOpenFriends={() => go('friends')}
             tab={photoTab} onTab={setPhotoTab} albums={albums} used={profile.used} quota={profile.quota} tier={profile.tier} />
           {shownView === 'friends' && <FriendsView friends={friends} say={say} />}
           {shownView === 'settings' && <SettingsView />}
-          {shownView === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} quota={profile.quota} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
+          {shownView === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} quota={profile.quota} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} onTierChange={profile.refresh} />}
           {shownView === 'admin' && <AdminView say={say} />}
         </main>
         <Footer />

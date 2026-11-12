@@ -21,7 +21,7 @@ const SORTS = {
 } as const;
 type Sort = keyof typeof SORTS;
 
-const small = 'rounded-lg border border-fg/15 bg-bg px-2 py-1.5 text-sm text-fg outline-none transition focus:border-fg/40';
+const small = 'rounded-lg border border-fg/15 bg-bg px-2 py-1.5 text-base text-fg outline-none sm:text-sm transition focus:border-fg/40';
 
 function Stat({ title, value, sub }: { title: string; value: string; sub?: string }) {
   return (

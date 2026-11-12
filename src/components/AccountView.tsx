@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { serif } from '@/lib/fonts';
-import { TIERS, TIER_KEYS, tierOf, type Tier } from '@/lib/limits';
+import { INVITES, TIERS, TIER_KEYS, rank, tierOf, type Tier } from '@/lib/limits';
 import { field, label, limitLabel, panel, pillGhost, pillPrimary, size } from '@/lib/ui';
 import { handle } from '@/lib/username';
 
@@ -48,10 +48,11 @@ function Info({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export function AccountView({ user, username, tier, quota, used, friendCount, say, onLogout }: {
-  user: User; username: string; tier: string; quota: number; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void;
+export function AccountView({ user, username, tier, quota, used, friendCount, say, onLogout, onTierChange }: {
+  user: User; username: string; tier: string; quota: number; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void; onTierChange: () => void;
 }) {
   const [photoCount, setPhotoCount] = useState<number | null>(null);
+  const [invited, setInvited] = useState<number | null>(null); // friends who joined via your link and uploaded a photo
   const [pw, setPw] = useState('');
   const [saving, setSaving] = useState(false);
   const current = tierOf(tier);
@@ -61,6 +62,21 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
   useEffect(() => {
     supabase.from('photos').select('id', { count: 'exact', head: true }).eq('owner_id', user.id).then(({ count }) => setPhotoCount(count ?? 0));
   }, [user.id, used]); // re-count when storage usage changes (upload / delete)
+
+  // Counts qualifying invites (and upgrades the plan on the server if a target was reached).
+  useEffect(() => {
+    supabase.rpc('redeem_invites').then(({ data, error }) => {
+      if (error || !data) return setInvited(0); // invites.sql not run yet
+      setInvited(data.count ?? 0);
+      if (tierOf(data.tier) !== tierOf(tier)) { onTierChange(); say(`You unlocked the ${TIERS[tierOf(data.tier)].name} plan!`); }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id, used]);
+
+  async function copyInvite() {
+    const url = `${location.origin}/?ref=${username}`;
+    try { await navigator.clipboard.writeText(url); say('Invite link copied'); } catch { say(url); }
+  }
 
   async function changePassword() {
     if (pw.length < 6) return say('Password must be at least 6 characters');
@@ -108,16 +124,29 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
         <div className="grid gap-3 sm:grid-cols-3">
           {TIER_KEYS.filter((t) => t !== 'admin').map((t) => {
             const isCurrent = t === current;
+            const need = t === 'plus' ? INVITES.plus : INVITES.pro;
+            const done = invited === null ? 0 : Math.min(invited, need);
             return (
               <div key={t} className={`${panel} flex flex-col p-5 ${isCurrent ? 'ring-1 ring-accent/60' : ''}`}>
                 <p className={`${serif.className} text-3xl italic`}>{TIERS[t].name}</p>
                 <ul className="mt-3 flex-1 space-y-1.5 text-sm text-fg/65">
                   {perks(t).map((p) => <li key={p}>{p}</li>)}
                 </ul>
-                {isCurrent && <p className="mt-5 text-center text-xs font-medium text-accent-text">Your current plan</p>}
+                {isCurrent ? <p className="mt-5 text-center text-xs font-medium text-accent-text">Your current plan</p>
+                  : rank(t) < rank(current) ? <p className="mt-5 text-center text-xs text-fg/40">Included in your plan</p>
+                  : t === 'free' ? null : (
+                    <div className="mt-5" role="progressbar" aria-label={`Invites toward ${TIERS[t].name}`} aria-valuemin={0} aria-valuemax={need} aria-valuenow={done}>
+                      <div className="flex justify-between text-xs text-fg/50"><span>Unlock with invites</span><span>{invited === null ? '...' : `${done} / ${need}`}</span></div>
+                      <div className="mt-1.5 h-[3px] rounded-full bg-fg/10"><div className="h-full rounded-full bg-accent transition-all" style={{ width: `${(done / need) * 100}%` }} /></div>
+                    </div>
+                  )}
               </div>
             );
           })}
+        </div>
+        <div className={`${panel} mt-3 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between`}>
+          <p className="text-sm text-fg/60">Invite friends to unlock a plan for free: {INVITES.plus} friends for Plus, {INVITES.pro} for Pro. A friend counts once they create an account with your link and upload a photo.</p>
+          <button className={`${pillPrimary} shrink-0`} onClick={copyInvite} disabled={!username}>Copy invite link</button>
         </div>
       </section>
 
