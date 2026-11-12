@@ -27,7 +27,7 @@ begin
      and exists (select 1 from photos ph where ph.owner_id = c.id)
      -- EMAIL CONFIRMATION: once you turn on "Confirm email" in Supabase (Authentication > Providers > Email),
      -- un-comment the next line so only friends with a confirmed email count.
-     -- and exists (select 1 from auth.users u where u.id = c.id and u.email_confirmed_at is not null)
+     and exists (select 1 from auth.users u where u.id = c.id and u.email_confirmed_at is not null)
   ;
   select tier into t from profiles where id = auth.uid();
   nt := t;
