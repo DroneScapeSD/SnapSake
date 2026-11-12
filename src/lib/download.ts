@@ -24,7 +24,5 @@ export const isIOS = () =>
   (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 
 // True when this device should open the system share sheet (with "Save Image") instead of downloading a file.
-export function sharesViaSheet() {
-  if (!isIOS() || typeof navigator.canShare !== 'function' || typeof navigator.share !== 'function') return false;
-  try { return navigator.canShare({ files: [new File([''], 'photo.png', { type: 'image/png' })] }); } catch { return false; }
-}
+// Only checks for iPhone / iPad and a share function. Whether this exact file can be shared is checked when sharing.
+export const sharesViaSheet = () => isIOS() && typeof navigator.share === 'function';

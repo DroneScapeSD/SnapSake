@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
 import { albumLink, type Album, type Albums } from '@/lib/albums';
-import { downloadPhoto, prepareDownload, TAP_AGAIN, type Photo } from '@/lib/photos';
+import { downloadPhoto, prepareDownload, shareMessage, type Photo } from '@/lib/photos';
 import { sharesViaSheet } from '@/lib/download';
 import type { Friendship } from '@/lib/friends';
 import { handle } from '@/lib/username';
@@ -216,7 +216,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
   }
   async function download(p: Photo) {
     setDownloading(true);
-    try { await downloadPhoto(p, urls[p.id]); } catch (e) { say((e as Error).message === TAP_AGAIN ? 'Photo is ready. Tap again to share it.' : "Couldn't download this photo"); }
+    try { await downloadPhoto(p, urls[p.id]); } catch (e) { say(shareMessage(e)); }
     finally { setDownloading(false); }
   }
   // On iPhone the share sheet needs the PNG ready the moment you tap, so start preparing it as soon as the photo opens.

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
 import { compressImage } from '@/lib/compress';
-import { downloadPhoto, prepareDownload, signedUrls, TAP_AGAIN, type Photo } from '@/lib/photos';
+import { downloadPhoto, prepareDownload, signedUrls, shareMessage, type Photo } from '@/lib/photos';
 import { sharesViaSheet } from '@/lib/download';
 import type { Friendship } from '@/lib/friends';
 import { handle } from '@/lib/username';
@@ -182,7 +182,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
     try {
       const used = await downloadPhoto(open, urls[open.id]);
       if (used !== urls[open.id]) setUrls((u) => ({ ...u, [open.id]: used })); // keep the refreshed link
-    } catch (e) { say((e as Error).message === TAP_AGAIN ? 'Photo is ready. Tap again to share it.' : "Couldn't download this photo"); }
+    } catch (e) { say(shareMessage(e)); }
     finally { setDownloading(false); }
   }
   // On iPhone the share sheet needs the PNG ready the moment you tap, so start preparing it as soon as the photo opens.

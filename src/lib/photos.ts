@@ -47,18 +47,27 @@ export function prepareDownload(p: Photo, url?: string) {
 
 // iPhone / iPad: opens the share sheet from the bottom (Save Image, AirDrop, Messages...). Everything else: downloads a PNG.
 // Resolves to the link that worked; throws if the photo can't be saved. Throws 'tap-again' on iPhone if the photo was still
-// being prepared when the sheet was asked for; it is ready by the next tap.
+// being prepared when the sheet was asked for; it is ready by the next tap. Other iPhone failures throw 'share:<reason>'.
 export const TAP_AGAIN = 'tap-again';
+// The message shown when downloadPhoto throws.
+export function shareMessage(e: unknown) {
+  const m = (e as Error)?.message ?? '';
+  if (m === TAP_AGAIN) return 'Photo is ready. Tap again to share it.';
+  if (m.startsWith('share:')) return `Couldn't open the share sheet (${m.slice(6)})`;
+  return "Couldn't download this photo";
+}
 export async function downloadPhoto(p: Photo, url?: string): Promise<string> {
   if (sharesViaSheet()) {
     const { file, url: used } = await getPrepared(p, url);
     try {
+      if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) throw Object.assign(new Error('files not supported'), { name: 'NotSupportedError' });
       await navigator.share({ files: [file] });
     } catch (e) {
       const name = (e as Error)?.name;
       if (name === 'AbortError') return used; // they closed the sheet
       if (name === 'NotAllowedError') throw new Error(TAP_AGAIN); // too long since the tap, so iOS refused the sheet
-      saveBlob(file, file.name); // sharing isn't possible after all: fall back to a normal download
+      // Never fall back to a file download on iPhone (that is the popup this replaces); say what went wrong instead.
+      throw new Error(`share:${name ?? 'error'}`);
     }
     return used;
   }
