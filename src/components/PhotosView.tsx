@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
 import { compressImage } from '@/lib/compress';
-import { downloadPhoto, signedUrls, type Photo } from '@/lib/photos';
+import { downloadPhoto, prepareDownload, signedUrls, TAP_AGAIN, type Photo } from '@/lib/photos';
+import { sharesViaSheet } from '@/lib/download';
 import type { Friendship } from '@/lib/friends';
 import { handle } from '@/lib/username';
 import type { Albums } from '@/lib/albums';
@@ -181,9 +182,12 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
     try {
       const used = await downloadPhoto(open, urls[open.id]);
       if (used !== urls[open.id]) setUrls((u) => ({ ...u, [open.id]: used })); // keep the refreshed link
-    } catch { say("Couldn't download this photo"); }
+    } catch (e) { say((e as Error).message === TAP_AGAIN ? 'Photo is ready. Tap again to share it.' : "Couldn't download this photo"); }
     finally { setDownloading(false); }
   }
+  // On iPhone the share sheet needs the PNG ready the moment you tap, so start preparing it as soon as the photo opens.
+  const openId = open?.id, openUrl = open ? urls[open.id] : undefined;
+  useEffect(() => { if (open && openUrl) prepareDownload(open, openUrl); }, [openId, openUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function del() {
     if (!open) return;
@@ -306,7 +310,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                 <button aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fg/15 text-fg/60 transition hover:bg-fg/10 hover:text-fg" onClick={() => setOpen(null)}>✕</button>
               </div>
               <button className={`${pillPrimary} w-full !py-2.5`} onClick={download} disabled={downloading}>
-                {downloading ? 'Preparing...' : 'Download PNG'}
+                {downloading ? 'Preparing...' : sharesViaSheet() ? 'Share / Save photo' : 'Download PNG'}
               </button>
               {open.owner_id === uid ? (
                 <>

@@ -17,3 +17,14 @@ export function saveBlob(blob: Blob, filename: string) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// iPhone / iPad (newer iPads report themselves as a Mac, so check for a touch screen too).
+export const isIOS = () =>
+  typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+// True when this device should open the system share sheet (with "Save Image") instead of downloading a file.
+export function sharesViaSheet() {
+  if (!isIOS() || typeof navigator.canShare !== 'function' || typeof navigator.share !== 'function') return false;
+  try { return navigator.canShare({ files: [new File([''], 'photo.png', { type: 'image/png' })] }); } catch { return false; }
+}

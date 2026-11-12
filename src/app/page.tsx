@@ -197,7 +197,7 @@ function Home() {
             tab={photoTab} onTab={setPhotoTab} albums={albums} used={profile.used} quota={profile.quota} tier={profile.tier} />
           {shownView === 'friends' && <FriendsView friends={friends} say={say} />}
           {shownView === 'settings' && <SettingsView />}
-          {shownView === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} quota={profile.quota} requested={profile.requested} onRequested={profile.refresh} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
+          {shownView === 'account' && <AccountView user={user} username={profile.username} tier={profile.tier} quota={profile.quota} used={profile.used} friendCount={friends.friends.length} say={say} onLogout={logout} />}
           {shownView === 'admin' && <AdminView say={say} />}
         </main>
         <Footer />

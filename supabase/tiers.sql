@@ -1,6 +1,6 @@
 -- Run once in Supabase > SQL Editor, AFTER schema.sql, friends_and_tiers.sql, albums.sql and usernames.sql. Safe to re-run.
 -- Adds the four plans (free / plus / pro / admin), per-user storage limits, share limits that follow the plan,
--- upgrade requests, and the numbers behind the admin dashboard.
+-- and the numbers behind the admin dashboard.
 --
 -- NOTE: this replaces share_photo, share_info, add_album_member and join_album. If you ever re-run usernames.sql or
 -- albums.sql, run this file again afterwards so the plan limits stay in force.
@@ -21,10 +21,8 @@ alter table profiles add column if not exists quota_bytes bigint;
 alter table profiles drop constraint if exists profiles_quota_check;
 alter table profiles add constraint profiles_quota_check check (quota_bytes is null or quota_bytes >= 0);
 
--- The plan someone asked for with the Upgrade button (you activate it from the admin dashboard).
-alter table profiles add column if not exists requested_tier text;
-alter table profiles drop constraint if exists profiles_requested_tier_check;
-alter table profiles add constraint profiles_requested_tier_check check (requested_tier is null or requested_tier in ('plus', 'pro'));
+-- Left over from a removed "request an upgrade" feature; safe if that column was never added.
+alter table profiles drop column if exists requested_tier;
 
 -- Your account gets the Admin plan.
 update profiles set tier = 'admin' where username = 'slater';
@@ -105,7 +103,6 @@ create or replace function admin_user_stats() returns jsonb language sql stable 
     'created_at', u.created_at,
     'used_bytes', p.used_bytes,
     'quota_bytes', p.quota_bytes,
-    'requested_tier', p.requested_tier,
     'friend_count', (select count(*) from friendships f where f.status = 'accepted' and (f.requester_id = p.id or f.addressee_id = p.id))
   ) order by u.created_at desc), '[]'::jsonb)
   from profiles p join auth.users u on u.id = p.id;

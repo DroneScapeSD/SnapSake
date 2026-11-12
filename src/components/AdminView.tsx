@@ -7,7 +7,7 @@ import { handle } from '@/lib/username';
 
 type Row = {
   id: string; username: string; email: string; tier: string; created_at: string;
-  used_bytes: number; quota_bytes: number | null; requested_tier: string | null; friend_count: number;
+  used_bytes: number; quota_bytes: number | null; friend_count: number;
 };
 
 const UNITS = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 } as const;
@@ -98,7 +98,7 @@ export function AdminView({ say }: { say: (m: string) => void }) {
     const j = await call('/api/admin/update-user', token, { userId: row.id, ...change });
     setSaving(null);
     if (!j) return;
-    setRows((rs) => rs && rs.map((x) => (x.id === row.id ? { ...x, tier: j.user.tier, quota_bytes: j.user.quota_bytes, requested_tier: j.user.requested_tier } : x)));
+    setRows((rs) => rs && rs.map((x) => (x.id === row.id ? { ...x, tier: j.user.tier, quota_bytes: j.user.quota_bytes } : x)));
     setEditing(null);
     say(okMsg);
   }
@@ -139,7 +139,6 @@ export function AdminView({ say }: { say: (m: string) => void }) {
 
   const totalUsed = (rows ?? []).reduce((n, r) => n + r.used_bytes, 0);
   const perTier = TIER_KEYS.map((t) => `${(rows ?? []).filter((r) => tierOf(r.tier) === t).length} ${TIERS[t].name}`).join(' · ');
-  const requests = (rows ?? []).filter((r) => r.requested_tier).length;
   const friendships = Math.round((rows ?? []).reduce((n, r) => n + r.friend_count, 0) / 2);
 
   return (
@@ -152,11 +151,10 @@ export function AdminView({ say }: { say: (m: string) => void }) {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Stat title="Users" value={rows ? String(rows.length) : '...'} sub={rows ? perTier : undefined} />
         <Stat title="Storage used" value={rows ? size(totalUsed) : '...'} sub={rows && rows.length ? `${size(totalUsed / rows.length)} per user on average` : undefined} />
         <Stat title="Friendships" value={rows ? String(friendships) : '...'} />
-        <Stat title="Upgrade requests" value={rows ? String(requests) : '...'} sub={requests ? 'Change their plan below to activate it' : undefined} />
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -189,7 +187,6 @@ export function AdminView({ say }: { say: (m: string) => void }) {
                       onChange={(e) => update(r, { tier: e.target.value as Tier }, `${handle(r.username)} is now on ${TIERS[e.target.value as Tier].name}`)}>
                       {TIER_KEYS.map((t) => <option key={t} value={t}>{TIERS[t].name}</option>)}
                     </select>
-                    {r.requested_tier && <p className="mt-1 text-xs text-accent-text">Wants {TIERS[tierOf(r.requested_tier)].name}</p>}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-fg/70">{new Date(r.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                   <td className="px-4 py-3">

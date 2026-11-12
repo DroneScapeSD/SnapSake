@@ -26,8 +26,6 @@ export const TIERS: Record<Tier, TierSpec> = {
   admin: { name: 'Admin', quota: TB, shares: 50, maxFile: 100 * MB, resolution: 'Original quality', fit: null },
 };
 
-// Plans a person can ask for. 'admin' is only ever given from the admin dashboard.
-export const UPGRADABLE: Tier[] = ['plus', 'pro'];
 export const MAX_CUSTOM_QUOTA = 10 * TB; // the most the admin dashboard will accept as a custom limit
 
 export const tierOf = (t?: string | null): Tier => ((TIER_KEYS as readonly string[]).includes(t ?? '') ? (t as Tier) : 'free');

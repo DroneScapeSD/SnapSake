@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePrefs } from '@/lib/prefs';
 import { serif } from '@/lib/fonts';
 import { albumLink, type Album, type Albums } from '@/lib/albums';
-import { downloadPhoto, type Photo } from '@/lib/photos';
+import { downloadPhoto, prepareDownload, TAP_AGAIN, type Photo } from '@/lib/photos';
+import { sharesViaSheet } from '@/lib/download';
 import type { Friendship } from '@/lib/friends';
 import { handle } from '@/lib/username';
 import { api, field, label, panel, photoGrid, pillGhost, pillPrimary, size } from '@/lib/ui';
@@ -215,9 +216,12 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
   }
   async function download(p: Photo) {
     setDownloading(true);
-    try { await downloadPhoto(p, urls[p.id]); } catch { say("Couldn't download this photo"); }
+    try { await downloadPhoto(p, urls[p.id]); } catch (e) { say((e as Error).message === TAP_AGAIN ? 'Photo is ready. Tap again to share it.' : "Couldn't download this photo"); }
     finally { setDownloading(false); }
   }
+  // On iPhone the share sheet needs the PNG ready the moment you tap, so start preparing it as soon as the photo opens.
+  const viewingId = viewing?.id, viewingUrl = viewing ? urls[viewing.id] : undefined;
+  useEffect(() => { if (viewing && viewingUrl) prepareDownload(viewing, viewingUrl); }, [viewingId, viewingUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tile = 'group relative aspect-[4/5] overflow-hidden rounded-3xl bg-fg/[0.06] ring-1 ring-fg/10 focus-visible:ring-2 focus-visible:ring-fg';
 
@@ -304,7 +308,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
                   <div><p className="break-all font-medium">{viewing.filename}</p><p className="mt-0.5 text-xs text-fg/45">{size(viewing.size_bytes)} · {viewerIndex + 1} of {openPhotos.length}</p></div>
                   <button aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-fg/15 text-fg/60 transition hover:bg-fg/10 hover:text-fg" onClick={() => setViewer(null)}>✕</button>
                 </div>
-                <button className={`${pillPrimary} w-full !py-2.5`} onClick={() => download(viewing)} disabled={downloading}>{downloading ? 'Preparing...' : 'Download PNG'}</button>
+                <button className={`${pillPrimary} w-full !py-2.5`} onClick={() => download(viewing)} disabled={downloading}>{downloading ? 'Preparing...' : sharesViaSheet() ? 'Share / Save photo' : 'Download PNG'}</button>
                 {open.is_owner && viewing.in_library && (
                   <button className="w-full rounded-full border border-fg/15 py-2.5 text-sm text-fg/80 transition hover:bg-fg/10" onClick={() => removePhoto(open, viewing.id)}>Remove from album</button>
                 )}
