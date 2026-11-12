@@ -4,6 +4,7 @@ import { SITE } from '@/lib/site';
 
 export const metadata: Metadata = {
   title: `Terms & Conditions — ${SITE.name}`,
+  alternates: { canonical: '/terms' },
   description: `The rules for using ${SITE.name}: your account, your photos, sharing limits and acceptable use.`,
 };
 

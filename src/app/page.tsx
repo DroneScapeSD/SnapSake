@@ -128,27 +128,16 @@ function Home() {
   const nameProblem = username && (checkUsername(username) ?? (taken === normalizeUsername(username) ? `${handle(taken)} is already taken` : null));
   const logout = () => supabase.auth.signOut();
 
-  if (!ready) return null;
+  // Before the session check finishes, render the public landing page instead of nothing, so crawlers and
+  // link previews get real content in the server HTML. The login card is a same-sized placeholder (no flash of inputs).
+  if (!ready) return <Landing card={<div aria-hidden className="h-[26rem] rounded-3xl border border-fg/10 bg-fg/[0.03]" />} />;
 
   const toastEl = toast && (
     <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-bg shadow-lg">{toast}</div>
   );
 
   if (!user) return (
-    <main className={`${sans.className} relative flex min-h-screen flex-col overflow-hidden bg-bg text-fg`}>
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_75%_0%,rgba(245,166,35,0.16),transparent_70%),radial-gradient(50%_40%_at_0%_100%,rgba(99,102,241,0.12),transparent_70%)]" />
-      <div className="relative mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-6 py-12 md:grid-cols-[1.2fr_1fr]">
-        <section>
-          <p className={`${label} text-fg/50`}>{APP}</p>
-          <h1 className="mt-6 text-[clamp(2.75rem,8vw,6rem)] font-semibold leading-[0.95] tracking-tight">
-            Your photos.<br />
-            <span className={`${serif.className} font-normal italic text-accent-text`}>Shared</span> on purpose.
-          </h1>
-          <p className="mt-6 max-w-md text-lg text-fg/60">
-            A private photo library. Send any photo to exactly the friends you choose, no group chats needed.
-          </p>
-        </section>
-        <section>
+    <Landing toast={toastEl} card={(
           <div className="rounded-3xl border border-fg/10 bg-fg/[0.03] p-8 backdrop-blur">
             <h2 className="text-2xl font-semibold tracking-tight">{signingUp ? 'Create your account' : 'Welcome'}</h2>
             <p className="mt-1 text-sm text-fg/50">{signingUp ? 'Pick a username, then add your email and a password.' : 'Log in with your username or email.'}</p>
@@ -178,11 +167,7 @@ function Home() {
               <button type="button" className={`${pillGhost} w-full`} onClick={switchMode}>{signingUp ? 'I already have an account' : 'Create account'}</button>
             </form>
           </div>
-        </section>
-      </div>
-      <Footer className="relative" />
-      {toastEl}
-    </main>
+    )} />
   );
 
   return (
@@ -214,5 +199,55 @@ function Home() {
       </div>
       {toastEl}
     </div>
+  );
+}
+
+
+function Hero() {
+  return (
+    <section>
+      <p className={`${label} text-fg/50`}>{APP}</p>
+      <h1 className="mt-6 text-[clamp(2.75rem,8vw,6rem)] font-semibold leading-[0.95] tracking-tight">
+        Your photos.<br />
+        <span className={`${serif.className} font-normal italic text-accent-text`}>Shared</span> on purpose.
+      </h1>
+      <p className="mt-6 max-w-md text-lg text-fg/60">
+        {APP} is a private photo library. Send any photo to exactly the friends you choose, no group chats needed.
+      </p>
+    </section>
+  );
+}
+
+const STEPS = [
+  { title: 'Upload to a private library', text: 'Your photos are visible only to you until you decide to share them.' },
+  { title: 'Share with exactly who you choose', text: 'Send each photo to individual friends by username. You decide who sees what, photo by photo.' },
+  { title: 'Make albums with a private link', text: 'Group photos into an album and let friends join through a link you can reset at any time.' },
+];
+
+// The logged-out page. Rendered on the server too (see the !ready branch), so everything outside the login card is crawlable text.
+function Landing({ card, toast }: { card: React.ReactNode; toast?: React.ReactNode }) {
+  return (
+    <main className={`${sans.className} relative flex min-h-screen flex-col overflow-hidden bg-bg text-fg`}>
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_75%_0%,rgba(245,166,35,0.16),transparent_70%),radial-gradient(50%_40%_at_0%_100%,rgba(99,102,241,0.12),transparent_70%)]" />
+      <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-[1.2fr_1fr]">
+        <Hero />
+        <section>{card}</section>
+      </div>
+      <section aria-labelledby="how" className="relative mx-auto w-full max-w-6xl px-6 pb-16">
+        <h2 id="how" className={`${label} text-fg/50`}>How {APP} works</h2>
+        <ol className="mt-6 grid gap-4 md:grid-cols-3">
+          {STEPS.map((st, i) => (
+            <li key={st.title} className="rounded-3xl border border-fg/10 bg-fg/[0.03] p-6">
+              <span className="text-sm text-accent-text">0{i + 1}</span>
+              <h3 className="mt-2 text-lg font-semibold tracking-tight">{st.title}</h3>
+              <p className="mt-2 text-sm text-fg/60">{st.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <div className="flex-1" />
+      <Footer className="relative" />
+      {toast}
+    </main>
   );
 }
