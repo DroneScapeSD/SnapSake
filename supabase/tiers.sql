@@ -3,7 +3,8 @@
 -- and the numbers behind the admin dashboard.
 --
 -- NOTE: this replaces share_photo, share_info, add_album_member and join_album. If you ever re-run usernames.sql or
--- albums.sql, run this file again afterwards so the plan limits stay in force.
+-- albums.sql, run this file again afterwards so the plan limits stay in force. Then run album_contributors.sql again too
+-- (it replaces join_album once more, adding the "view & add" link).
 
 do $$ begin
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'username') then

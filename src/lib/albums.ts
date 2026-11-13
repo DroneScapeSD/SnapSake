@@ -8,10 +8,12 @@ export type Album = {
   is_owner: boolean;
   owner_username: string;
   created_at: string;
-  share_token: string | null; // only the owner receives this
+  share_token: string | null; // view-only link; only the owner receives this
+  contribute_token: string | null; // view & add link; only the owner receives this (null until album_contributors.sql is run)
+  can_add: boolean; // this user may add photos (always true for the owner)
   photo_ids: string[]; // newest first
   member_count: number;
-  members: { user_id: string; username: string }[]; // only filled in for the owner
+  members: { user_id: string; username: string; can_add: boolean }[]; // only filled in for the owner
 };
 
 // ---- Share links: https://your-site/?join=<token> ----
@@ -46,7 +48,9 @@ export function useAlbums(uid: string | null) {
         setItems((data as Album[]).map((a) => ({
           ...a,
           owner_username: a.owner_username ?? '',
-          members: (a.members ?? []).map((m) => ({ ...m, username: m.username ?? '' })),
+          contribute_token: a.contribute_token ?? null,
+          can_add: a.can_add ?? a.is_owner,
+          members: (a.members ?? []).map((m) => ({ ...m, username: m.username ?? '', can_add: m.can_add ?? false })),
         })));
         setSetupError(false);
       }
@@ -80,9 +84,11 @@ export function useAlbums(uid: string | null) {
     },
     join: async (token: string) => {
       const r = await call('join_album', { p_token: token });
-      return { album: r.data as { id: string; name: string } | null, error: r.error };
+      return { album: r.data as { id: string; name: string; can_add?: boolean } | null, error: r.error };
     },
     resetLink: async (id: string) => fail('reset_album_link', { p_album: id }),
+    resetAddLink: async (id: string) => fail('reset_contribute_link', { p_album: id }),
+    setMemberCanAdd: (id: string, userId: string, can: boolean) => fail('set_member_can_add', { p_album: id, p_user: userId, p_can: can }),
     rename: (id: string, name: string) => fail('rename_album', { p_album: id, p_name: name }),
     // Goes through the server so photos uploaded directly to the album are also deleted from storage.
     remove: async (id: string) => {

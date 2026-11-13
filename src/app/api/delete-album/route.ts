@@ -5,7 +5,7 @@ import { r2, BUCKET } from '@/lib/r2';
 import { adjustUsed } from '@/lib/usage';
 
 // Deletes an album. Photos from the owner's library stay; photos that were uploaded straight into the album
-// (and aren't in another album) are deleted for good, including their stored files and storage usage.
+// (by the owner or by people who were allowed to add; not in another album) are deleted for good, including their stored files and storage usage.
 export async function POST(req: NextRequest) {
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   const token = (req.headers.get('authorization') || '').replace('Bearer ', '');
@@ -18,9 +18,10 @@ export async function POST(req: NextRequest) {
 
   const { data: links } = await admin.from('album_photos').select('photo_id').eq('album_id', id);
   const ids = (links ?? []).map((l) => l.photo_id as string);
-  let doomed: { id: string; object_key: string; size_bytes: number }[] = [];
+  let doomed: { id: string; owner_id: string; object_key: string; size_bytes: number }[] = [];
   if (ids.length) {
-    const { data: only } = await admin.from('photos').select('id,object_key,size_bytes').in('id', ids).eq('owner_id', user.id).eq('in_library', false);
+    // Includes photos other people uploaded straight into this album, otherwise they'd be left hidden and still using their space.
+    const { data: only } = await admin.from('photos').select('id,owner_id,object_key,size_bytes').in('id', ids).eq('in_library', false);
     const { data: elsewhere } = await admin.from('album_photos').select('photo_id').in('photo_id', ids).neq('album_id', id);
     const keep = new Set((elsewhere ?? []).map((l) => l.photo_id as string)); // still needed by another album
     doomed = (only ?? []).filter((p) => !keep.has(p.id));
@@ -29,7 +30,9 @@ export async function POST(req: NextRequest) {
   for (const p of doomed) { try { await r2.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: p.object_key })); } catch {} }
   if (doomed.length) {
     await admin.from('photos').delete().in('id', doomed.map((p) => p.id));
-    await adjustUsed(admin, user.id, -doomed.reduce((n, p) => n + p.size_bytes, 0));
+    const freed = new Map<string, number>(); // bytes to give back to each uploader
+    for (const p of doomed) freed.set(p.owner_id, (freed.get(p.owner_id) ?? 0) + p.size_bytes);
+    for (const [uid, bytes] of freed) await adjustUsed(admin, uid, -bytes);
   }
   const { error } = await admin.from('albums').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

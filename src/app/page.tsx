@@ -86,7 +86,7 @@ function Home() {
     albums.join(token).then(({ album, error }) => {
       setInvite(false);
       if (error || !album) return say(error ?? 'Could not open this album link');
-      say(`Joined album "${album.name}"`);
+      say(album.can_add ? `Joined album "${album.name}". You can add photos to it.` : `Joined album "${album.name}"`);
       albums.setOpenId(album.id); setPhotoTab('albums'); go('photos');
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

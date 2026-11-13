@@ -28,8 +28,13 @@ export async function POST(req: NextRequest) {
   if (albumId !== undefined && albumId !== null && (typeof albumId !== 'string' || !UUID.test(albumId))) return NextResponse.json({ error: 'Bad request' }, { status: 400 });
 
   if (albumId) {
-    const { data: album } = await admin.from('albums').select('id').eq('id', albumId).eq('owner_id', user.id).single();
-    if (!album) return NextResponse.json({ error: 'Not your album' }, { status: 403 });
+    // The owner can always add. Anyone else needs "can add" (given by the view & add link or by the owner).
+    const { data: album } = await admin.from('albums').select('id,owner_id').eq('id', albumId).single();
+    if (!album) return NextResponse.json({ error: 'Album not found' }, { status: 404 });
+    if (album.owner_id !== user.id) {
+      const { data: m } = await admin.from('album_members').select('can_add').eq('album_id', albumId).eq('user_id', user.id).maybeSingle();
+      if (!m?.can_add) return NextResponse.json({ error: "You don't have permission to add photos to this album" }, { status: 403 });
+    }
 
     // Same photo already uploaded? Reuse it: add it to the album, with no extra storage and no second upload.
     const { data: dup } = await admin.from('photos').select('id').eq('owner_id', user.id).eq('content_hash', hash).limit(1);
