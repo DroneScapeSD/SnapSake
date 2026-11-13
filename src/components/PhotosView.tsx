@@ -320,7 +320,7 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                       <div className="flex gap-1">
                         {Array.from({ length: info?.limit ?? planShares }).map((_, i) => <span key={i} className={`h-1 w-4 rounded-full ${info && i < info.used ? 'bg-accent' : 'bg-fg/15'}`} />)}
                       </div>
-                      <p className="text-xs text-fg/45">{info ? `${info.used} of ${info.limit ?? planShares} slots used (lifetime)` : ' '}</p>
+                      <p className="text-xs text-fg/45">{info ? `${info.used} of ${info.limit ?? planShares} Slots Used` : ' '}</p>
                     </div>
                     {(() => {
                       // Friends first; anyone it was shared with before who isn't (or is no longer) a friend stays listed so you can still remove them.
