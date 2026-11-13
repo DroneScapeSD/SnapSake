@@ -316,9 +316,9 @@ export function PhotosView({ uid, active, say, onChanged, friends, onOpenFriends
                 <>
                   <div>
                     <p className={`${label} text-fg/50`}>Share with friends</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="flex gap-1">
-                        {Array.from({ length: info?.limit ?? planShares }).map((_, i) => <span key={i} className={`h-1.5 w-6 rounded-full ${info && i < info.used ? 'bg-accent' : 'bg-fg/15'}`} />)}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                      <div className="flex shrink-0 gap-[3px]">
+                        {Array.from({ length: info?.limit ?? planShares }).map((_, i) => <span key={i} className={`h-1 w-3.5 rounded-full ${info && i < info.used ? 'bg-accent' : 'bg-fg/15'}`} />)}
                       </div>
                       <p className="text-xs text-fg/45">{info ? `${info.used} of ${info.limit ?? planShares} slots used (lifetime)` : ' '}</p>
                     </div>
