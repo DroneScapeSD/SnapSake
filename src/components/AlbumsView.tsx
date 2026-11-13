@@ -165,6 +165,7 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
   const [picker, setPicker] = useState<'new' | 'add' | null>(null);
   const [viewer, setViewer] = useState<string | null>(null); // id of the photo open in the viewer
   const [downloading, setDownloading] = useState(false);
+  const [linkMode, setLinkMode] = useState<'view' | 'add'>('view'); // which share link the owner is looking at
 
   const byId = useMemo(() => new Map(photos.map((p) => [p.id, p])), [photos]);
   const mine = useMemo(() => photos.filter((p) => p.owner_id === uid && p.in_library), [photos, uid]); // what "add from My Uploads" can offer
@@ -249,6 +250,8 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
   if (open) {
     const link = open.share_token ? albumLink(open.share_token) : '';
     const addLink = open.contribute_token ? albumLink(open.contribute_token) : '';
+    const shownMode = linkMode === 'add' && open.contribute_token ? 'add' : 'view';
+    const shownLink = shownMode === 'add' ? addLink : link;
     return (
       <div className="space-y-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -278,31 +281,30 @@ export function AlbumsView({ uid, albums, photos, urls, say, friends, onOpenFrie
         {open.is_owner && (
           <section className={`${panel} space-y-5 p-5`}>
             <div>
-              <p className={`${label} text-fg/50`}>View-only link</p>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input readOnly className={field} value={link} onFocus={(e) => e.target.select()} aria-label="Album view-only link" />
-                <button className={`${pillPrimary} shrink-0`} onClick={() => copy(open.share_token, 'View-only')}>Copy link</button>
+              <p className={`${label} text-fg/50`}>Share with a link</p>
+              <div role="radiogroup" aria-label="What people with the link can do" className="mt-3 inline-flex rounded-full border border-fg/15 p-1">
+                {([['view', 'View only'], ['add', 'View & add']] as const).map(([m, text]) => {
+                  const on = shownMode === m;
+                  return (
+                    <button key={m} role="radio" aria-checked={on} disabled={m === 'add' && !open.contribute_token} onClick={() => setLinkMode(m)}
+                      className={`rounded-full px-4 py-1.5 text-sm font-medium transition disabled:opacity-40 ${on ? 'bg-fg text-bg' : 'text-fg/60 hover:text-fg'}`}>{text}</button>
+                  );
+                })}
               </div>
-              <p className="mt-2 text-xs text-fg/40">Anyone who opens this link and logs in (or creates an account) is added to this album automatically, and can view and download its photos.</p>
-            </div>
-            <div>
-              <p className={`${label} text-fg/50`}>View &amp; add link</p>
-              {open.contribute_token ? (
-                <>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <input readOnly className={field} value={addLink} onFocus={(e) => e.target.select()} aria-label="Album view and add link" />
-                    <button className={`${pillPrimary} shrink-0`} onClick={() => copy(open.contribute_token, 'View & add')}>Copy link</button>
-                  </div>
-                  <p className="mt-2 text-xs text-fg/40">Same as above, but people who join with this link can also upload photos to the album. Their uploads use their own storage. You can also tick &ldquo;Can add&rdquo; next to anyone below.</p>
-                </>
-              ) : (
-                <p className="mt-2 text-xs text-fg/40">Run <code>supabase/album_contributors.sql</code> in the Supabase SQL Editor to turn this on, then reload.</p>
-              )}
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input readOnly className={field} value={shownLink} onFocus={(e) => e.target.select()} aria-label={shownMode === 'add' ? 'Album view and add link' : 'Album view-only link'} />
+                <button className={`${pillPrimary} shrink-0`} onClick={() => copy(shownMode === 'add' ? open.contribute_token : open.share_token, shownMode === 'add' ? 'View & add' : 'View-only')}>Copy link</button>
+              </div>
+              <p className="mt-2 text-xs text-fg/40">
+                {shownMode === 'add'
+                  ? 'Anyone who opens this link and logs in (or creates an account) joins this album and can view, download and add photos. Their uploads use their own storage. You can also tick “Can add” next to anyone below.'
+                  : 'Anyone who opens this link and logs in (or creates an account) is added to this album automatically, and can view and download its photos.'}
+              </p>
+              {!open.contribute_token && <p className="mt-1 text-xs text-fg/40">To turn on View &amp; add, run <code>supabase/album_contributors.sql</code> in the Supabase SQL Editor, then reload.</p>}
             </div>
             <ShareList album={open} friends={friends} albums={albums} say={say} onOpenFriends={onOpenFriends} shareLimit={shareLimit} />
             <div className="flex flex-wrap gap-2 border-t border-fg/10 pt-4">
-              <button className={smallGhost} onClick={() => reset(open)}>Reset view-only link</button>
-              {open.contribute_token && <button className={smallGhost} onClick={() => resetAdd(open)}>Reset view &amp; add link</button>}
+              <button className={smallGhost} onClick={() => (shownMode === 'add' ? resetAdd(open) : reset(open))}>Reset {shownMode === 'add' ? 'view & add' : 'view-only'} link</button>
               <button className={smallDanger} onClick={() => del(open)}>Delete album</button>
             </div>
           </section>
