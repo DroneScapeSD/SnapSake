@@ -35,3 +35,56 @@ body {
   color: var(--fg);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ---- Profile cards: Free is plain, Plus glows, Pro and Admin are animated ---- */
+@property --pf-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes pf-spin { to { --pf-angle: 360deg; } }
+@keyframes pf-shine { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(220%); } }
+
+.pf-frame { position: relative; border-radius: 1.75rem; padding: 1px; background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.pf-frame > .pf-inner { border-radius: calc(1.75rem - 1px); background: var(--surface); position: relative; overflow: hidden; }
+
+.pf-frame.tier-plus {
+  padding: 1.5px;
+  background: linear-gradient(135deg, #22d3ee, #6366f1 55%, #a78bfa);
+  box-shadow: 0 0 28px -6px rgba(99, 102, 241, 0.55);
+}
+.pf-frame.tier-plus > .pf-inner::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 80% at 0% 0%, rgba(34, 211, 238, 0.14), transparent 60%), radial-gradient(100% 80% at 100% 0%, rgba(167, 139, 250, 0.14), transparent 60%);
+}
+
+.pf-frame.tier-pro, .pf-frame.tier-admin {
+  padding: 2px;
+  background: conic-gradient(from var(--pf-angle), #fbbf24, #f472b6, #a855f7, #38bdf8, #fbbf24);
+  animation: pf-spin 6s linear infinite;
+  box-shadow: 0 0 40px -4px rgba(244, 114, 182, 0.5), 0 0 70px -10px rgba(251, 191, 36, 0.4);
+}
+.pf-frame.tier-pro > .pf-inner::before, .pf-frame.tier-admin > .pf-inner::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(90% 70% at 10% 0%, rgba(251, 191, 36, 0.20), transparent 60%), radial-gradient(90% 70% at 100% 10%, rgba(168, 85, 247, 0.22), transparent 60%);
+}
+.pf-frame.tier-admin { background: conic-gradient(from var(--pf-angle), #f87171, #fbbf24, #fde68a, #f87171); box-shadow: 0 0 40px -4px rgba(248, 113, 113, 0.5), 0 0 70px -10px rgba(251, 191, 36, 0.45); }
+
+.pf-avatar { position: relative; display: flex; align-items: center; justify-content: center; border-radius: 9999px; font-weight: 600; text-transform: uppercase; }
+.tier-free .pf-avatar { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.tier-plus .pf-avatar { color: #fff; background: linear-gradient(135deg, #0891b2, #6366f1); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px #6366f1; }
+.tier-pro .pf-avatar { color: #1a1204; background: linear-gradient(135deg, #fbbf24, #f472b6); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px #f59e0b, 0 0 24px rgba(244, 114, 182, 0.6); }
+.tier-admin .pf-avatar { color: #1a0a04; background: linear-gradient(135deg, #fde68a, #f87171); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px #f87171, 0 0 24px rgba(248, 113, 113, 0.6); }
+
+.pf-badge { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 0.3rem; border-radius: 9999px; padding: 0.2rem 0.7rem; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.pf-badge.tier-free { background: color-mix(in srgb, var(--fg) 8%, transparent); color: color-mix(in srgb, var(--fg) 55%, transparent); font-weight: 500; }
+.pf-badge.tier-plus { color: #fff; background: linear-gradient(90deg, #0891b2, #6366f1); }
+.pf-badge.tier-pro { color: #1a1204; background: linear-gradient(90deg, #fbbf24, #f472b6, #a855f7); }
+.pf-badge.tier-admin { color: #1a0a04; background: linear-gradient(90deg, #fde68a, #f87171); }
+.pf-badge.tier-pro::after, .pf-badge.tier-admin::after, .pf-badge.tier-plus::after {
+  content: ''; position: absolute; inset: 0; width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: pf-shine 3.2s ease-in-out infinite;
+}
+.pf-badge.tier-plus::after { animation-duration: 5s; opacity: 0.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-frame.tier-pro, .pf-frame.tier-admin { animation: none; }
+  .pf-badge::after { animation: none !important; display: none; }
+}

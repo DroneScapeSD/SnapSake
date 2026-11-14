@@ -6,21 +6,7 @@ import { serif } from '@/lib/fonts';
 import { INVITES, TIERS, TIER_KEYS, rank, tierOf, type Tier } from '@/lib/limits';
 import { field, label, limitLabel, panel, pillGhost, pillPrimary, size } from '@/lib/ui';
 import { handle } from '@/lib/username';
-
-function accountAge(iso: string) {
-  const start = new Date(iso);
-  const now = new Date();
-  let months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth();
-  if (now.getDate() < start.getDate()) months--;
-  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  if (months >= 12) {
-    const y = Math.floor(months / 12), m = months % 12;
-    return m ? `${plural(y, 'year')}, ${plural(m, 'month')}` : plural(y, 'year');
-  }
-  if (months >= 1) return plural(months, 'month');
-  const days = Math.floor((now.getTime() - start.getTime()) / 86_400_000);
-  return days < 1 ? 'Joined today' : plural(days, 'day');
-}
+import { ProfileCard } from '@/components/ProfileCard';
 
 // What each plan includes, as shown on the cards. The numbers come from TIERS in lib/limits.ts.
 const perks = (t: Tier, storage?: number) => [
@@ -28,16 +14,6 @@ const perks = (t: Tier, storage?: number) => [
   `${TIERS[t].resolution} photo quality`,
   `Share each photo or album with up to ${TIERS[t].shares} people`,
 ];
-
-function Stat({ title, value, sub }: { title: string; value: string; sub?: string }) {
-  return (
-    <div className={`${panel} p-5`}>
-      <p className={`${label} text-fg/50`}>{title}</p>
-      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
-      {sub && <p className="mt-1 text-xs text-fg/45">{sub}</p>}
-    </div>
-  );
-}
 
 function Info({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -51,7 +27,6 @@ function Info({ title, children }: { title: string; children: React.ReactNode })
 export function AccountView({ user, username, tier, quota, used, friendCount, say, onLogout, onTierChange }: {
   user: User; username: string; tier: string; quota: number; used: number; friendCount: number; say: (m: string) => void; onLogout: () => void; onTierChange: () => void;
 }) {
-  const [photoCount, setPhotoCount] = useState<number | null>(null);
   const [invited, setInvited] = useState<number | null>(null); // friends who joined via your link and uploaded a photo
   const [pw, setPw] = useState('');
   const [saving, setSaving] = useState(false);
@@ -72,6 +47,10 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id, used]);
+
+  const [origin, setOrigin] = useState('');
+  useEffect(() => setOrigin(location.origin), []);
+  const inviteUrl = username && origin ? `${origin}/?ref=${username}` : '';
 
   async function copyInvite() {
     const url = `${location.origin}/?ref=${username}`;
@@ -96,11 +75,7 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
         <p className="mt-3 truncate text-sm text-fg/50">{username && handle(username)}</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat title="Account age" value={accountAge(user.created_at)} sub={`Since ${joined.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`} />
-        <Stat title="Photos" value={photoCount === null ? '...' : String(photoCount)} sub="Uploaded by you" />
-        <Stat title="Friends" value={String(friendCount)} />
-      </div>
+      {username && <ProfileCard username={username} refreshKey={`${used}-${friendCount}-${tier}`} />}
 
       <section className={`${panel} p-6`}>
         <div className="flex items-start justify-between gap-4">
@@ -144,8 +119,8 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
             );
           })}
         </div>
-        <div className={`${panel} mt-3 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between`}>
-          <p className="text-sm text-fg/60">Invite friends to unlock a plan for free: {INVITES.plus} friends for Plus, {INVITES.pro} for Pro. A friend counts once they create an account with your link and upload a photo.</p>
+        <div className={`${panel} mt-3 flex flex-col gap-2 p-5 sm:flex-row sm:items-center`}>
+          <input readOnly className={field} value={inviteUrl} placeholder="Loading your invite link..." onFocus={(e) => e.target.select()} aria-label="Your invite link" />
           <button className={`${pillPrimary} shrink-0`} onClick={copyInvite} disabled={!username}>Copy invite link</button>
         </div>
       </section>

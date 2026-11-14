@@ -4,6 +4,7 @@ import { serif } from '@/lib/fonts';
 import type { Friends, Friendship } from '@/lib/friends';
 import { field, label, panel, pillPrimary } from '@/lib/ui';
 import { checkUsername, handle } from '@/lib/username';
+import { ProfileModal } from '@/components/ProfileCard';
 
 const since = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -11,14 +12,16 @@ function Avatar({ username }: { username: string }) {
   return <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fg/10 text-sm font-semibold uppercase">{username[0]}</span>;
 }
 
-function Row({ f, note, children }: { f: Friendship; note: string; children: React.ReactNode }) {
+function Row({ f, note, onOpen, children }: { f: Friendship; note: string; onOpen: (u: string) => void; children: React.ReactNode }) {
   return (
     <li className="flex items-center gap-4 rounded-2xl bg-fg/[0.04] px-4 py-3">
-      <Avatar username={f.username} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{handle(f.username)}</p>
-        <p className="text-xs text-fg/45">{note}</p>
-      </div>
+      <button className="flex min-w-0 flex-1 items-center gap-4 text-left" onClick={() => onOpen(f.username)} aria-label={`View ${handle(f.username)}'s profile`}>
+        <Avatar username={f.username} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium hover:underline">{handle(f.username)}</span>
+          <span className="block text-xs text-fg/45">{note}</span>
+        </span>
+      </button>
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </li>
   );
@@ -33,6 +36,7 @@ export function FriendsView({ friends: fr, say }: { friends: Friends; say: (m: s
   const [picked, setTab] = useState<'friends' | 'requests' | null>(null);
   const [name, setName] = useState('');
   const [pending, setPending] = useState<string | null>(null); // id of the row being acted on
+  const [profileOf, setProfileOf] = useState<string | null>(null); // username whose profile popup is open
 
   const act = async (id: string, fn: () => Promise<string | null>, ok?: string) => {
     setPending(id);
@@ -58,6 +62,7 @@ export function FriendsView({ friends: fr, say }: { friends: Friends; say: (m: s
 
   return (
     <div className="space-y-8">
+      {profileOf && <ProfileModal username={profileOf} onClose={() => setProfileOf(null)} />}
       <div>
         <h2 className="text-[clamp(2.5rem,7vw,5rem)] font-semibold leading-none tracking-tight">
           Your <span className={`${serif.className} font-normal italic`}>friends</span>
@@ -101,7 +106,7 @@ export function FriendsView({ friends: fr, say }: { friends: Friends; say: (m: s
         ) : (
           <ul className="space-y-2">
             {fr.friends.map((f) => (
-              <Row key={f.id} f={f} note={`Friends since ${since(f.created_at)}`}>
+              <Row key={f.id} f={f} onOpen={setProfileOf} note={`Friends since ${since(f.created_at)}`}>
                 <button className={smallDanger} disabled={pending === f.id}
                   onClick={() => confirm(`Remove ${handle(f.username)} from your friends?`) && act(f.id, () => fr.remove(f.id), 'Friend removed')}>Remove</button>
               </Row>
@@ -120,7 +125,7 @@ export function FriendsView({ friends: fr, say }: { friends: Friends; say: (m: s
               <h3 className={`${label} mb-3 text-fg/50`}>Received</h3>
               <ul className="space-y-2">
                 {fr.incoming.map((f) => (
-                  <Row key={f.id} f={f} note={`Sent ${since(f.created_at)}`}>
+                  <Row key={f.id} f={f} onOpen={setProfileOf} note={`Sent ${since(f.created_at)}`}>
                     <button className={smallPrimary} disabled={pending === f.id} onClick={() => act(f.id, () => fr.respond(f.id, true), 'Friend added')}>Accept</button>
                     <button className={smallGhost} disabled={pending === f.id} onClick={() => act(f.id, () => fr.respond(f.id, false))}>Decline</button>
                   </Row>
@@ -133,7 +138,7 @@ export function FriendsView({ friends: fr, say }: { friends: Friends; say: (m: s
               <h3 className={`${label} mb-3 text-fg/50`}>Sent</h3>
               <ul className="space-y-2">
                 {fr.outgoing.map((f) => (
-                  <Row key={f.id} f={f} note={`Waiting since ${since(f.created_at)}`}>
+                  <Row key={f.id} f={f} onOpen={setProfileOf} note={`Waiting since ${since(f.created_at)}`}>
                     <button className={smallGhost} disabled={pending === f.id} onClick={() => act(f.id, () => fr.remove(f.id), 'Request cancelled')}>Cancel</button>
                   </Row>
                 ))}
