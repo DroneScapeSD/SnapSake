@@ -34,10 +34,6 @@ export function AccountView({ user, username, tier, quota, used, friendCount, sa
   const plan = TIERS[current];
   const joined = new Date(user.created_at);
 
-  useEffect(() => {
-    supabase.from('photos').select('id', { count: 'exact', head: true }).eq('owner_id', user.id).then(({ count }) => setPhotoCount(count ?? 0));
-  }, [user.id, used]); // re-count when storage usage changes (upload / delete)
-
   // Counts qualifying invites (and upgrades the plan on the server if a target was reached).
   useEffect(() => {
     supabase.rpc('redeem_invites').then(({ data, error }) => {
